@@ -1,8 +1,7 @@
 <?php
 /**
  * Vartotojų valdymo puslapis
- * 
- * Šis failas atvaizduoja vartotojų sąrašą ir leidžia juos valdyti
+ * * Šis failas atvaizduoja vartotojų sąrašą ir leidžia juos valdyti
  */
 
 // Įtraukiame konfigūracijos failus
@@ -21,36 +20,44 @@ if (!is_admin()) {
     redirect(SITE_URL);
 }
 
-// Vartotojo šalinimas
-if (isset($_GET['delete']) && !empty($_GET['delete'])) {
-    $user_id = sanitize_input($_GET['delete']);
-    
-    // Tikriname ar vartotojas egzistuoja
-    $sql = "SELECT * FROM vartotojas WHERE vart_id = ?";
-    $stmt = db_query($sql, [$user_id]);
-    $user = db_get_row($stmt);
-    
-    if ($user) {
-        // Šaliname vartotoją
-        $sql = "DELETE FROM vartotojas WHERE vart_id = ?";
-        $stmt = db_query($sql, [$user_id]);
-        
-        if ($stmt) {
-            set_message('Vartotojas sėkmingai pašalintas', 'success');
-        } else {
-            set_message('Klaida šalinant vartotoją', 'error');
-        }
-    } else {
-        set_message('Vartotojas nerastas', 'error');
+// PATAISYTA: Saugus vartotojo šalinimas vykdomas tik per POST užklausą
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_user') {
+    // Tikriname CSRF žetoną
+    if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
+        set_message('Netinkamas sesijos žetonas (CSRF).', 'error');
+        redirect(SITE_URL . '/modules/admin/users.php');
     }
+
+    $user_id = sanitize_input($_POST['user_id']);
     
+    // Tikriname, ar vartotojas nebando ištrinti savęs
+    if ($user_id === $_SESSION['user_id']) {
+        set_message('Negalite ištrinti patys savęs!', 'error');
+    } else {
+        $sql = "SELECT * FROM vartotojas WHERE vart_id = ?";
+        $stmt = db_query($sql, [$user_id], 's');
+        $user = $stmt ? db_get_row($stmt) : null;
+        
+        if ($user) {
+            $sql = "DELETE FROM vartotojas WHERE vart_id = ?";
+            $delete_stmt = db_query($sql, [$user_id], 's');
+            
+            if ($delete_stmt) {
+                set_message('Vartotojas sėkmingai pašalintas', 'success');
+            } else {
+                set_message('Klaida šalinant vartotoją', 'error');
+            }
+        } else {
+            set_message('Vartotojas nerastas', 'error');
+        }
+    }
     redirect(SITE_URL . '/modules/admin/users.php');
 }
 
 // Gauname vartotojų sąrašą
 $sql = "SELECT * FROM vartotojas ORDER BY vart_id ASC";
 $stmt = db_query($sql);
-$users = db_get_results($stmt);
+$users = $stmt ? db_get_results($stmt) : [];
 
 // Įtraukiame antraštę
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
@@ -60,30 +67,32 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h1>Vartotojų valdymas</h1>
-                <a href="<?php echo SITE_URL; ?>/modules/admin/user_add.php" class="btn btn-primary">Naujas vartotojas</a>
+                <h1 class="h3 mb-0">Vartotojų valdymas</h1>
+                <a href="<?php echo SITE_URL; ?>/modules/admin/user_add.php" class="btn btn-primary btn-sm">Naujas vartotojas</a>
             </div>
             <div class="card-body">
+                <?php display_message(); ?>
+                
                 <?php if (!empty($users)): ?>
                     <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead>
+                        <table class="table table-striped table-hover align-middle">
+                            <thead class="table-light">
                                 <tr>
-                                    <th>Vartotojo ID</th>
+                                    <th>Vartotojo ID (Vardas)</th>
                                     <th>Vardas</th>
                                     <th>Pavardė</th>
                                     <th>Mokykla</th>
                                     <th>Lygis</th>
-                                    <th>Veiksmai</th>
+                                    <th class="text-end">Veiksmai</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($users as $user): ?>
                                     <tr>
-                                        <td><?php echo $user['vart_id']; ?></td>
-                                        <td><?php echo $user['var_vardas']; ?></td>
-                                        <td><?php echo $user['var_pavarde']; ?></td>
-                                        <td><?php echo $user['var_mokykla']; ?></td>
+                                        <td><strong><?php echo htmlspecialchars($user['vart_id']); ?></strong></td>
+                                        <td><?php echo htmlspecialchars($user['var_vardas']); ?></td>
+                                        <td><?php echo htmlspecialchars($user['var_pavarde']); ?></td>
+                                        <td><?php echo htmlspecialchars($user['var_mokykla'] ?: 'Nepriskirta'); ?></td>
                                         <td>
                                             <?php if ($user['vart_lygis'] == 'admin'): ?>
                                                 <span class="badge bg-danger">Administratorius</span>
@@ -91,9 +100,19 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                                 <span class="badge bg-primary">Mokyklos atstovas</span>
                                             <?php endif; ?>
                                         </td>
-                                        <td>
-                                            <a href="<?php echo SITE_URL; ?>/modules/admin/user_edit.php?id=<?php echo $user['vart_id']; ?>" class="btn btn-sm btn-primary">Redaguoti</a>
-                                            <a href="<?php echo SITE_URL; ?>/modules/admin/users.php?delete=<?php echo $user['vart_id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Ar tikrai norite pašalinti šį vartotoją?')">Šalinti</a>
+                                        <td class="text-end">
+                                            <div class="d-flex justify-content-end gap-1">
+                                                <a href="<?php echo SITE_URL; ?>/modules/admin/user_edit.php?id=<?php echo urlencode($user['vart_id']); ?>" class="btn btn-sm btn-outline-primary">Redaguoti</a>
+                                                
+                                                <?php if ($user['vart_id'] !== $_SESSION['user_id']): ?>
+                                                    <form method="post" action="" onsubmit="return confirm('Ar tikrai norite pašalinti šį vartotoją?');" style="display:inline;">
+                                                        <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+                                                        <input type="hidden" name="action" value="delete_user">
+                                                        <input type="hidden" name="user_id" value="<?php echo htmlspecialchars($user['vart_id']); ?>">
+                                                        <button type="submit" class="btn btn-sm btn-danger">Ištrinti</button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>
@@ -101,16 +120,11 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         </table>
                     </div>
                 <?php else: ?>
-                    <div class="alert alert-info">
-                        <p>Nėra vartotojų.</p>
-                    </div>
+                    <div class="alert alert-info">Sistemoje nėra registruotų vartotojų.</div>
                 <?php endif; ?>
             </div>
         </div>
     </div>
 </div>
 
-<?php
-// Įtraukiame poraštę
-require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php';
-?>
+<?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>

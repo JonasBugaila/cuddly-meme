@@ -1,8 +1,7 @@
 <?php
 /**
  * Prizininkų ataskaitos puslapis su spausdinimo funkcija
- * 
- * Šis failas atvaizduoja prizininkų ataskaitas pagal olimpiadas ir mokyklas
+ * * Šis failas atvaizduoja prizininkų ataskaitas pagal olimpiadas ir mokyklas
  * ir leidžia eksportuoti diplomus į PDF (po vieną arba masiškai)
  */
 
@@ -22,18 +21,17 @@ if (!is_logged_in()) {
 // Nustatome filtrus
 $olympiad = isset($_GET['olympiad']) ? sanitize_input($_GET['olympiad']) : '';
 $school = isset($_GET['school']) ? sanitize_input($_GET['school']) : '';
-$topWinners = isset($_GET['topWinners']) && $_GET['topWinners'] == '1';
 $print_mode = isset($_GET['print']) && $_GET['print'] == '1';
 
 // Gauname olimpiadų sąrašą
 $sql = "SELECT DISTINCT konkurso_pav FROM konkursai ORDER BY konkurso_pav ASC";
 $stmt = db_query($sql);
-$olympiads = db_get_results($stmt);
+$olympiads = $stmt ? db_get_results($stmt) : [];
 
 // Gauname mokyklų sąrašą
 $sql = "SELECT DISTINCT pavadinimas FROM mokyklos ORDER BY pavadinimas ASC";
 $stmt = db_query($sql);
-$schools = db_get_results($stmt);
+$schools = $stmt ? db_get_results($stmt) : [];
 
 // Gauname prizininkų sąrašą
 $where = [];
@@ -54,16 +52,16 @@ if (!empty($school)) {
 
 $where[] = "d.Vieta IN ('I', 'II', 'III', 'laureat.')";
 
-$where_clause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
+$where_clause = 'WHERE ' . implode(' AND ', $where);
 
 $sql = "SELECT d.*, m.pavadinimas AS mokykla_pilna 
         FROM dalyviai d 
         LEFT JOIN mokyklos m ON d.var_mokykla = m.pavadinimas 
         $where_clause 
-        ORDER BY d.konkurso_pav, FIELD(d.Vieta, 'I','II','III','laureat.'), d.Balai DESC";
+        ORDER BY d.konkurso_pav, FIELD(d.Vieta, 'I','II','III','laureat.'), CAST(d.Balai AS UNSIGNED) DESC";
 
 $stmt = db_query($sql, $params, $types);
-$winners = db_get_results($stmt);
+$winners = $stmt ? db_get_results($stmt) : [];
 
 // Formatuojame vietą
 function formatPlace($place) {
@@ -73,7 +71,7 @@ function formatPlace($place) {
         'III' => 'III vieta',
         'laureat.' => 'Laureatas'
     ];
-    return $places[$place] ?? $place;
+    return $places[$place] ?? htmlspecialchars($place);
 }
 ?>
 
@@ -117,7 +115,6 @@ function formatPlace($place) {
                         </div>
                     </div>
                     <div class="card-body">
-                        <!-- Filtrai -->
                         <form method="get" class="row g-3 mb-4 no-print">
                             <div class="col-md-4">
                                 <label class="form-label">Olimpiada</label>
@@ -153,7 +150,6 @@ function formatPlace($place) {
                             </div>
                         </form>
 
-                        <!-- Masinis eksportas -->
                         <?php if (!empty($winners) && !$print_mode): ?>
                             <div class="mb-3 text-end no-print">
                                 <a href="<?php echo SITE_URL; ?>/modules/reports/export_diplomas.php?konkursas=<?php echo urlencode($olympiad ?: 'Visos'); ?>"
@@ -163,7 +159,6 @@ function formatPlace($place) {
                             </div>
                         <?php endif; ?>
 
-                        <!-- Lentelė -->
                         <?php if (!empty($winners)): ?>
                             <div class="table-responsive">
                                 <table class="table table-striped table-hover align-middle">
@@ -189,7 +184,7 @@ function formatPlace($place) {
                                                 <td><?php echo htmlspecialchars($winner['1_klase']); ?></td>
                                                 <td><?php echo htmlspecialchars($winner['mokykla_pilna'] ?? $winner['var_mokykla']); ?></td>
                                                 <td><?php echo htmlspecialchars($winner['1_mok'] ?? '-'); ?></td>
-                                                <td><strong><?php echo $winner['Balai']; ?></strong></td>
+                                                <td><strong><?php echo htmlspecialchars($winner['Balai']); ?></strong></td>
                                                 <td>
                                                     <span class="badge bg-warning text-dark">
                                                         <?php echo formatPlace($winner['Vieta']); ?>
@@ -220,7 +215,13 @@ function formatPlace($place) {
         </div>
     </div>
 
-    <?php if (!$print_mode): ?>
+    <?php if ($print_mode): ?>
+        <script>
+            window.onload = function() {
+                window.print();
+            };
+        </script>
+    <?php else: ?>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <?php endif; ?>
 </body>

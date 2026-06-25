@@ -1,8 +1,7 @@
 <?php
 /**
  * Duomenų bazės prisijungimo failas
- * 
- * Šis failas naudojamas prisijungimui prie duomenų bazės
+ * * Šis failas naudojamas prisijungimui prie duomenų bazės
  */
 
 require_once 'config.php';
@@ -34,8 +33,7 @@ function db_connect() {
 
 /**
  * Saugus užklausos vykdymas
- * 
- * @param string $sql SQL užklausa
+ * * @param string $sql SQL užklausa
  * @param array $params Parametrai
  * @param string $types Parametrų tipai (i - integer, s - string, d - double, b - blob)
  * @return mysqli_stmt|false Grąžina paruoštą užklausą arba false klaidos atveju
@@ -53,11 +51,11 @@ function db_query($sql, $params = [], $types = '') {
         if (empty($types)) {
             $types = '';
             foreach ($params as $param) {
-                if (is_int($param)) {
+                if (is_int($param) || is_bool($param)) {
                     $types .= 'i';
                 } elseif (is_float($param)) {
                     $types .= 'd';
-                } elseif (is_string($param)) {
+                } elseif (is_string($param) || is_null($param)) {
                     $types .= 's';
                 } else {
                     $types .= 'b';
@@ -78,8 +76,7 @@ function db_query($sql, $params = [], $types = '') {
 
 /**
  * Gauna visus užklausos rezultatus
- * 
- * @param mysqli_stmt $stmt Paruošta užklausa
+ * * @param mysqli_stmt $stmt Paruošta užklausa
  * @return array|false Rezultatų masyvas arba false jei klaida
  */
 function db_get_results($stmt) {
@@ -109,8 +106,7 @@ function db_get_results($stmt) {
 
 /**
  * Gauti vieną rezultatą
- * 
- * @param mysqli_stmt $stmt Paruošta užklausa
+ * * @param mysqli_stmt $stmt Paruošta užklausa
  * @return array|false Grąžina rezultatą arba false klaidos atveju
  */
 function db_get_row($stmt) {
@@ -132,21 +128,25 @@ function db_get_row($stmt) {
     $result->free();
     $stmt->close();
     
-    return $row;
+    return $row ?: false; // Grąžina false, jei nerasta įrašų
 }
 
 /**
  * Įterpti duomenis į lentelę
- * 
- * @param string $table Lentelės pavadinimas
+ * * @param string $table Lentelės pavadinimas
  * @param array $data Duomenys (stulpelis => reikšmė)
  * @return int|false Grąžina įterpto įrašo ID arba false klaidos atveju
  */
 function db_insert($table, $data) {
-    $columns = implode(', ', array_keys($data));
+    // Apsaugome stulpelių pavadinimus su backticks
+    $escaped_columns = array_map(function($col) {
+        return "`" . str_replace("`", "``", $col) . "`";
+    }, array_keys($data));
+    
+    $columns = implode(', ', $escaped_columns);
     $placeholders = implode(', ', array_fill(0, count($data), '?'));
     
-    $sql = "INSERT INTO $table ($columns) VALUES ($placeholders)";
+    $sql = "INSERT INTO `$table` ($columns) VALUES ($placeholders)";
     $stmt = db_query($sql, array_values($data));
     
     if (!$stmt) {
@@ -161,8 +161,7 @@ function db_insert($table, $data) {
 
 /**
  * Atnaujinti duomenis lentelėje
- * 
- * @param string $table Lentelės pavadinimas
+ * * @param string $table Lentelės pavadinimas
  * @param array $data Duomenys (stulpelis => reikšmė)
  * @param string $where WHERE sąlyga
  * @param array $where_params WHERE parametrai
@@ -175,12 +174,14 @@ function db_update($table, $data, $where, $where_params = []) {
     
     // Nustatome stulpelius ir jų tipus
     foreach ($data as $column => $value) {
-        $set[] = "$column = ?";
-        if (is_int($value)) {
+        $safe_column = "`" . str_replace("`", "``", $column) . "`";
+        $set[] = "$safe_column = ?";
+        
+        if (is_int($value) || is_bool($value)) {
             $types .= 'i';
         } elseif (is_float($value)) {
             $types .= 'd';
-        } elseif (is_string($value)) {
+        } elseif (is_string($value) || is_null($value)) {
             $types .= 's';
         } else {
             $types .= 'b';
@@ -191,18 +192,18 @@ function db_update($table, $data, $where, $where_params = []) {
     
     // Nustatome WHERE parametrų tipus
     foreach ($where_params as $param) {
-        if (is_int($param)) {
+        if (is_int($param) || is_bool($param)) {
             $types .= 'i';
         } elseif (is_float($param)) {
             $types .= 'd';
-        } elseif (is_string($param)) {
+        } elseif (is_string($param) || is_null($param)) {
             $types .= 's';
         } else {
             $types .= 'b';
         }
     }
     
-    $sql = "UPDATE $table SET $set WHERE $where";
+    $sql = "UPDATE `$table` SET $set WHERE $where";
     $params = array_merge($values, $where_params);
     
     $stmt = db_query($sql, $params, $types);
@@ -219,14 +220,13 @@ function db_update($table, $data, $where, $where_params = []) {
 
 /**
  * Ištrinti duomenis iš lentelės
- * 
- * @param string $table Lentelės pavadinimas
+ * * @param string $table Lentelės pavadinimas
  * @param string $where WHERE sąlyga
  * @param array $params WHERE parametrai
  * @return bool Grąžina true jei pavyko, false klaidos atveju
  */
 function db_delete($table, $where, $params = []) {
-    $sql = "DELETE FROM $table WHERE $where";
+    $sql = "DELETE FROM `$table` WHERE $where";
     $stmt = db_query($sql, $params);
     
     if ($stmt) {

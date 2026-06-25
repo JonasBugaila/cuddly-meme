@@ -1,14 +1,12 @@
 <?php
 /**
  * Bendros funkcijos
- * 
- * Šiame faile saugomos bendros funkcijos, naudojamos visoje sistemoje
+ * * Šiame faile saugomos bendros funkcijos, naudojamos visoje sistemoje
  */
 
 /**
  * Saugus įvesties filtravimas
- * 
- * @param string $data Įvesties duomenys
+ * * @param string $data Įvesties duomenys
  * @return string Išvalyti duomenys
  */
 function sanitize_input($data) {
@@ -19,26 +17,22 @@ function sanitize_input($data) {
 }
 
 /**
- * Slaptažodžio šifravimas (išjungtas)
- * 
- * @param string $password Slaptažodis
- * @return string Nešifruotas slaptažodis
+ * Slaptažodžio šifravimas
+ * * @param string $password Slaptažodis
+ * @return string Šifruotas slaptažodis
  */
 function hash_password($password) {
-    // Grąžiname nešifruotą slaptažodį
-    return $password;
+    return password_hash($password, PASSWORD_DEFAULT);
 }
 
 /**
- * Slaptažodžio tikrinimas (išjungtas)
- * 
- * @param string $password Slaptažodis
+ * Slaptažodžio tikrinimas
+ * * @param string $password Slaptažodis
  * @param string $hash Užšifruotas slaptažodis
  * @return bool Grąžina true jei slaptažodis teisingas
  */
 function verify_password($password, $hash) {
-    // Tiesioginis palyginimas
-    return $password === $hash;
+    return password_verify($password, $hash);
 }
 
 /**
@@ -53,8 +47,7 @@ function start_session() {
 
 /**
  * Patikrinti ar vartotojas prisijungęs
- * 
- * @return bool Grąžina true jei vartotojas prisijungęs
+ * * @return bool Grąžina true jei vartotojas prisijungęs
  */
 function is_logged_in() {
     start_session();
@@ -63,8 +56,7 @@ function is_logged_in() {
 
 /**
  * Patikrinti ar vartotojas turi administratoriaus teises
- * 
- * @return bool Grąžina true jei vartotojas turi administratoriaus teises
+ * * @return bool Grąžina true jei vartotojas turi administratoriaus teises
  */
 function is_admin() {
     start_session();
@@ -73,8 +65,7 @@ function is_admin() {
 
 /**
  * Nukreipti vartotoją į kitą puslapį
- * 
- * @param string $url URL adresas
+ * * @param string $url URL adresas
  */
 function redirect($url) {
     header("Location: $url");
@@ -83,8 +74,7 @@ function redirect($url) {
 
 /**
  * Generuoti atsitiktinį slaptažodį
- * 
- * @param int $length Slaptažodžio ilgis
+ * * @param int $length Slaptažodžio ilgis
  * @return string Sugeneruotas slaptažodis
  */
 function generate_password($length = 8) {
@@ -100,8 +90,7 @@ function generate_password($length = 8) {
 
 /**
  * Formatuoti datą lietuvišku formatu
- * 
- * @param string $date Data
+ * * @param string $date Data
  * @param string $format Formatas
  * @return string Suformatuota data
  */
@@ -112,8 +101,7 @@ function format_date($date, $format = 'Y-m-d H:i:s') {
 
 /**
  * Generuoti pranešimą
- * 
- * @param string $message Pranešimo tekstas
+ * * @param string $message Pranešimo tekstas
  * @param string $type Pranešimo tipas (success, error, warning, info)
  */
 function set_message($message, $type = 'info') {
@@ -126,8 +114,7 @@ function set_message($message, $type = 'info') {
 
 /**
  * Gauti pranešimą
- * 
- * @return array|null Pranešimas arba null jei nėra
+ * * @return array|null Pranešimas arba null jei nėra
  */
 function get_message() {
     start_session();
@@ -155,8 +142,7 @@ function display_message() {
 
 /**
  * Generuoti CSRF žetoną
- * 
- * @return string CSRF žetonas
+ * * @return string CSRF žetonas
  */
 function generate_csrf_token() {
     start_session();
@@ -170,8 +156,7 @@ function generate_csrf_token() {
 
 /**
  * Tikrinti CSRF žetoną
- * 
- * @param string $token CSRF žetonas
+ * * @param string $token CSRF žetonas
  * @return bool Grąžina true jei žetonas teisingas
  */
 function verify_csrf_token($token) {
@@ -186,8 +171,7 @@ function verify_csrf_token($token) {
 
 /**
  * Gauti dabartinį URL
- * 
- * @return string Dabartinis URL
+ * * @return string Dabartinis URL
  */
 function current_url() {
     $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
@@ -199,18 +183,23 @@ function current_url() {
 
 /**
  * Patikrinti ar masyvas turi visus reikiamus raktus
- * 
- * @param array $array Masyvas
+ * * @param array $array Masyvas
  * @param array $keys Raktai
- * @return bool Grąžina゙
+ * @return bool Grąžina true jei turi visus raktus, kitaip false
+ */
+function has_all_keys($array, $keys) {
+    foreach ($keys as $key) {
+        if (!array_key_exists($key, $array)) {
+            return false;
+        }
+    }
+    return true;
+}
 
-<?php
 /**
  * Lentelės spausdinimo funkcija
- * 
- * Ši funkcija generuoja spausdinamą lentelę su antrašte, parašo vieta ir puslapių numeracija
- * 
- * @param string $title Dokumento pavadinimas
+ * * Ši funkcija generuoja spausdinamą lentelę su antrašte, parašo vieta ir puslapių numeracija
+ * * @param string $title Dokumento pavadinimas
  * @param string $institution Įstaigos pavadinimas
  * @param array $headers Lentelės antraštės
  * @param array $data Lentelės duomenys
@@ -300,11 +289,6 @@ function generate_printable_table($title, $institution, $headers, $data, $option
     $html .= '</div>';
     $html .= '</div>';
     
-    // Pridedame puslapio numerį
-    //$html .= '<div class="text-end mt-3">';
-    //$html .= '<p class="small">' . $options['page_text'] . ' <span class="page-number"></span></p>';
-    //$html .= '</div>';
-    
     // Baigiame spausdinamą dalį
     $html .= '</div>';
     
@@ -356,6 +340,7 @@ function generate_printable_table($title, $institution, $headers, $data, $option
     
     return $html;
 }
+
 /**
  * === KALENDORIUS – JŪSŲ KONKURSAI (be warning'ų) ===
  * konk_id | konkurso_pav | status (0=aktyvus, 1=neaktyvus) | data
@@ -437,8 +422,6 @@ function display_konkursai_calendar() {
     </head>
     <body>
         <div class="container">
-            
-            </div>
             <div id="calendar"></div>
         </div>
 
@@ -461,7 +444,7 @@ function display_konkursai_calendar() {
                         week: 'Savaitė',
                         list: 'Sąrašas'
                     },
-                    events: <?= $events_json ?>,
+                    events: <?php echo $events_json; ?>,
                     eventClick: function(info) {
                         if (info.event.url) {
                             window.location.href = info.event.url;
@@ -480,18 +463,32 @@ function display_konkursai_calendar() {
     </html>
     <?php
 }
-// Automatiškai atnaujina statusą: jei data praėjo → neaktyvus
-//function update_konkursai_status() {
-//    $conn = db_connect();
-//    $conn->query("
-//        UPDATE konkursai 
-//        SET status = 1 
-//        WHERE data IS NOT NULL 
-//          AND data < CURDATE() 
-//          AND status = 0
-//    ");
-//}
-// Paleidžiama kiekvieną kartą įkeliant puslapį
-//update_konkursai_status();
-
+/**
+ * Įrašo įvykį į sistemos žurnalą
+ * * @param string $action Veiksmo pavadinimas (pvz., 'Prisijungimas', 'Klaida', 'Vartotojo trynimas')
+ * @param string $details Išsami informacija (neprivaloma)
+ */
+function log_action($action, $details = '') {
+    start_session();
+    
+    // Gauname vartotojo ID, jei jis prisijungęs
+    $user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'Svečias';
+    
+    // Gauname IP adresą, atsižvelgiant į galimus proxy (Cloudflare ir pan.)
+    $ip_address = $_SERVER['REMOTE_ADDR'] ?? 'Nežinomas IP';
+    if (array_key_exists('HTTP_X_FORWARDED_FOR', $_SERVER)) {
+        $ip_address = $_SERVER['HTTP_X_FORWARDED_FOR'];
+    }
+    
+    $data = [
+        'user_id' => $user_id,
+        'action' => sanitize_input($action),
+        'details' => sanitize_input($details),
+        'ip_address' => sanitize_input($ip_address),
+        'created_at' => date('Y-m-d H:i:s')
+    ];
+    
+    // Naudojame db_insert įrašymui į duomenų bazę
+    db_insert('system_logs', $data);
+}
 ?>

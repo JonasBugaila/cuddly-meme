@@ -1,8 +1,7 @@
 <?php
 /**
  * Vertinimo lentelės puslapis
- * 
- * Šis failas atvaizduoja olimpiadų vertinimo lentelę su užduočių balais,
+ * * Šis failas atvaizduoja olimpiadų vertinimo lentelę su užduočių balais,
  * leidžia spausdinti rezultatus, redaguoti balus ir vietas adminams,
  * bei spausdinti tuščią protokolą pildymui
  */
@@ -21,171 +20,64 @@ if (!is_logged_in()) {
     redirect(SITE_URL);
 }
 
-// Gauname filtrų reikšmes iš POST arba GET (spausdinimo režimui)
-$selected_olympiad = isset($_POST['olympiad']) ? trim(sanitize_input($_POST['olympiad'])) : '';
+// Gauname filtrų reikšmes
+$selected_olympiad = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['olympiad'])) {
+    $selected_olympiad = trim(sanitize_input($_POST['olympiad']));
+} elseif (isset($_GET['olympiad'])) {
+    $selected_olympiad = trim(sanitize_input($_GET['olympiad']));
+}
+
 $print_mode = isset($_GET['print']) && $_GET['print'] == '1';
 $print_empty_mode = isset($_GET['print_empty']) && $_GET['print_empty'] == '1';
-if ($print_mode && isset($_GET['olympiad'])) {
-    $selected_olympiad = trim(sanitize_input($_GET['olympiad']));
-}
-if ($print_empty_mode && isset($_GET['olympiad'])) {
-    $selected_olympiad = trim(sanitize_input($_GET['olympiad']));
-}
 
 // Apdorojame rezultatų įvedimą
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_results']) && is_admin()) {
-    foreach ($_POST['participant'] as $reg_id => $data) {
-        $balai = !empty($data['balai']) ? sanitize_input($data['balai']) : '';
-        $vieta = !empty($data['vieta']) ? sanitize_input($data['vieta']) : '';
-        
-        // Atnaujiname rezultatus
-        $sql = "UPDATE dalyviai SET Balai = ?, Vieta = ? WHERE reg_id = ?";
-        $stmt = db_query($sql, [$balai, $vieta, $reg_id]);
+    if (isset($_POST['participant']) && is_array($_POST['participant'])) {
+        foreach ($_POST['participant'] as $reg_id => $data) {
+            $balai = isset($data['balai']) ? sanitize_input($data['balai']) : '';
+            $vieta = isset($data['vieta']) ? sanitize_input($data['vieta']) : '';
+            
+            $sql = "UPDATE dalyviai SET Balai = ?, Vieta = ? WHERE reg_id = ?";
+            db_query($sql, [$balai, $vieta, $reg_id], 'ssi');
+        }
+        set_message('Rezultatai sėkmingai išsaugoti', 'success');
+    } else {
+        set_message('Nėra duomenų išsaugojimui.', 'warning');
     }
-    
-    set_message('Rezultatai sėkmingai išsaugoti', 'success');
     redirect(SITE_URL . '/modules/reports/evaluation_sheets.php?olympiad=' . urlencode($selected_olympiad));
 }
 
-// Gauname olimpiadų sąrašą filtrui
+// Gauname olimpiadų sąrašą
 $sql = "SELECT DISTINCT konkurso_pav FROM konkursai ORDER BY konkurso_pav";
 $stmt = db_query($sql);
-if (!$stmt) {
-    error_log("Failed to fetch olympiads: " . db_connect()->error);
-    set_message('Klaida gaunant olimpiadų sąrašą', 'error');
-}
-$olympiads = db_get_results($stmt);
+$olympiads = $stmt ? db_get_results($stmt) : [];
 
 // Gauname dalyvių rezultatus
 $participants = [];
 $participant_count = 0;
 if (!empty($selected_olympiad)) {
-    $sql = "SELECT reg_id, konkurso_pav, Balai, Vieta FROM dalyviai WHERE konkurso_pav = ? ORDER BY reg_id ASC";
-    $stmt = db_query($sql, [$selected_olympiad]);
+    $sql = "SELECT reg_id, konkurso_pav, Balai, Vieta FROM dalyviai WHERE konkurso_pav = ? ORDER BY CAST(Balai AS UNSIGNED) DESC, reg_id ASC";
+    $stmt = db_query($sql, [$selected_olympiad], 's');
     if ($stmt) {
         $participants = db_get_results($stmt);
         $participant_count = count($participants);
-    } else {
-        error_log("Failed to fetch participants: " . db_connect()->error);
-        set_message('Klaida gaunant dalyvių sąrašą', 'error');
     }
 }
 
-// ==================== SPAUSDINIMAS SU DUOMENIMIS (landscape) ====================
-if ($print_mode && !empty($selected_olympiad) && !empty($participants)) {
+// ==================== SPAUSDINIMAS (Su duomenimis arba tuščias) ====================
+if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
     header('Content-Type: text/html; charset=UTF-8');
     $headers = ['KODAS', 'I užd.', 'II užd.', 'III užd.', 'IV užd.', 'V užd.', 'VI užd.', 'VII užd.', 'VIII užd.', 'IX užd.', 'X užd.', 'IŠ VISO BALŲ', 'VIETA'];
     ?>
     <style>
         @media print {
-            @page {
-                size: landscape;
-                margin: 1cm;
-            }
-            body {
-                font-size: 10pt;
-            }
-            table {
-                font-size: 9pt;
-                width: 100%;
-                border-collapse: collapse;
-            }
-            th, td {
-                border: 1px solid #000;
-                padding: 4px;
-                text-align: center;
-            }
-            .evaluation-section {
-                page-break-after: always;
-            }
-            .evaluation-section:last-child {
-                page-break-after: auto;
-            }
-            .evaluation-title {
-                text-align: center;
-                font-size: 16px;
-                font-weight: bold;
-                margin-bottom: 10px;
-            }
-            .protocol-number {
-                text-align: center;
-                font-size: 12px;
-                margin-bottom: 20px;
-            }
-        }
-    </style>
-    <?php
-    // Padaliname po 15 eilučių
-    $chunks = array_chunk($participants, 15);
-    $total_pages = count($chunks);
-
-    foreach ($chunks as $page_num => $chunk) {
-        $data = [];
-        foreach ($chunk as $participant) {
-            $row = [
-                $participant['reg_id'],
-                '-', '-', '-', '-', '-', '-', '-', '-', '-', '-',
-                $participant['Balai'] ?? '-',
-                $participant['Vieta'] ?? '-'
-            ];
-            $data[] = $row;
-        }
-
-        echo '<div class="evaluation-section">';
-       // echo '<div class="evaluation-title">' . htmlspecialchars($selected_olympiad) . '</div>';
-      ///  echo '<div class="protocol-number">Protokolo Nr. _________</div>';
-        echo generate_printable_table($selected_olympiad, '', $headers, $data, [
-            'signature_text' => 'Atsakingo asmens parašas',
-            'signature_name' => '',
-            'include_back_button' => false
-        ]);
-        echo '<div style="text-align:center; margin-top:10px;">Puslapis ' . ($page_num + 1) . ' iš ' . $total_pages . '</div>';
-        echo '</div>';
-    }
-    exit;
-}
-
-// ==================== TUŠČIO PROTOKOLO SPAUSDINIMAS (landscape) ====================
-if ($print_empty_mode && !empty($selected_olympiad) && !empty($participants)) {
-    header('Content-Type: text/html; charset=UTF-8');
-    $headers = ['KODAS', 'I užd.', 'II užd.', 'III užd.', 'IV užd.', 'V užd.', 'VI užd.', 'VII užd.', 'VIII užd.', 'IX užd.', 'X užd.', 'IŠ VISO BALŲ', 'VIETA'];
-    ?>
-    <style>
-        @media print {
-            @page {
-                size: landscape;
-                margin: 1cm;
-            }
-            body {
-                font-size: 10pt;
-            }
-            table {
-                font-size: 9pt;
-                width: 100%;
-                border-collapse: collapse;
-            }
-            th, td {
-                border: 1px solid #000;
-                padding: 4px;
-                text-align: center;
-            }
-            .evaluation-section {
-                page-break-after: always;
-            }
-            .evaluation-section:last-child {
-                page-break-after: auto;
-            }
-            .evaluation-title {
-                text-align: center;
-                font-size: 16px;
-                font-weight: bold;
-                margin-bottom: 10px;
-            }
-            .protocol-number {
-                text-align: center;
-                font-size: 12px;
-                margin-bottom: 20px;
-            }
+            @page { size: landscape; margin: 1cm; }
+            body { font-size: 10pt; }
+            table { font-size: 9pt; width: 100%; border-collapse: collapse; }
+            th, td { border: 1px solid #000; padding: 4px; text-align: center; }
+            .evaluation-section { page-break-after: always; }
+            .evaluation-section:last-child { page-break-after: auto; }
         }
     </style>
     <?php
@@ -195,18 +87,18 @@ if ($print_empty_mode && !empty($selected_olympiad) && !empty($participants)) {
     foreach ($chunks as $page_num => $chunk) {
         $data = [];
         foreach ($chunk as $participant) {
-            $row = [
-                $participant['reg_id'],
-                '', '', '', '', '', '', '', '', '', '',
-                '',
-                ''
-            ];
-            $data[] = $row;
+            if ($print_empty_mode) {
+                $data[] = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
+            } else {
+                $data[] = [
+                    $participant['reg_id'], '-', '-', '-', '-', '-', '-', '-', '-', '-', '-',
+                    $participant['Balai'] ?? '-',
+                    $participant['Vieta'] ?? '-'
+                ];
+            }
         }
 
         echo '<div class="evaluation-section">';
-        //echo '<div class="evaluation-title">' . htmlspecialchars($selected_olympiad) . '</div>';
-        //echo '<div class="protocol-number">Protokolo Nr. _________</div>';
         echo generate_printable_table($selected_olympiad, '', $headers, $data, [
             'signature_text' => 'Atsakingo asmens parašas',
             'signature_name' => '',
@@ -215,6 +107,8 @@ if ($print_empty_mode && !empty($selected_olympiad) && !empty($participants)) {
         echo '<div style="text-align:center; margin-top:10px;">Puslapis ' . ($page_num + 1) . ' iš ' . $total_pages . '</div>';
         echo '</div>';
     }
+    
+    echo '<script>window.onload = function() { window.print(); };</script>';
     exit;
 }
 
@@ -233,7 +127,6 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                 <div class="card-body">
                     <?php display_message(); ?>
 
-                    <!-- Olimpiados pasirinkimo forma -->
                     <form method="post" action="<?php echo SITE_URL; ?>/modules/reports/evaluation_sheets.php" class="mb-4">
                         <div class="row">
                             <div class="col-md-6">
@@ -241,134 +134,72 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                     <label for="olympiad" class="form-label">Olimpiada</label>
                                     <select class="form-control" id="olympiad" name="olympiad" required>
                                         <option value="">Pasirinkite olimpiadą</option>
-                                        <?php foreach ($olympiads as $olympiad): ?>
-                                            <option value="<?php echo htmlspecialchars($olympiad['konkurso_pav']); ?>" <?php echo $selected_olympiad === $olympiad['konkurso_pav'] ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($olympiad['konkurso_pav']); ?>
+                                        <?php foreach ($olympiads as $oly): ?>
+                                            <option value="<?php echo htmlspecialchars($oly['konkurso_pav']); ?>" <?php echo $selected_olympiad === $oly['konkurso_pav'] ? 'selected' : ''; ?>>
+                                                <?php echo htmlspecialchars($oly['konkurso_pav']); ?>
                                             </option>
                                         <?php endforeach; ?>
                                     </select>
                                 </div>
                             </div>
+                            <div class="col-md-6 d-flex align-items-end mb-3 gap-2">
+                                <button type="submit" class="btn btn-primary">Rodyti lentelę</button>
+                                <?php if (!empty($selected_olympiad) && !empty($participants)): ?>
+                                    <a href="?print=1&olympiad=<?php echo urlencode($selected_olympiad); ?>" class="btn btn-outline-primary" target="_blank">Spausdinti su rezultatais</a>
+                                    <a href="?print_empty=1&olympiad=<?php echo urlencode($selected_olympiad); ?>" class="btn btn-outline-secondary" target="_blank">Spausdinti tuščią</a>
+                                <?php endif; ?>
+                            </div>
                         </div>
-                        <button type="submit" class="btn btn-primary">Rodyti lentelę</button>
-                        <?php if (!empty($selected_olympiad) && !empty($participants)): ?>
-                            <a href="<?php echo SITE_URL; ?>/modules/reports/evaluation_sheets.php?print=1&olympiad=<?php echo urlencode($selected_olympiad); ?>" class="btn btn-primary" target="_blank">Spausdinti</a>
-                            <a href="<?php echo SITE_URL; ?>/modules/reports/evaluation_sheets.php?print_empty=1&olympiad=<?php echo urlencode($selected_olympiad); ?>" class="btn btn-primary" target="_blank">Spausdinti protokolą pildymui</a>
-                        <?php endif; ?>
                     </form>
 
-                    <!-- Vertinimo lentelė -->
                     <?php if (!empty($selected_olympiad) && !empty($participants)): ?>
                         <h2 class="text-center mb-4"><?php echo htmlspecialchars($selected_olympiad); ?></h2>
-                        <?php if (is_admin()): ?>
-                            <form action="<?php echo SITE_URL; ?>/modules/reports/evaluation_sheets.php?olympiad=<?php echo urlencode($selected_olympiad); ?>" method="post">
-                                <div class="mb-3">
-                                    <button type="submit" name="save_results" class="btn btn-primary">Išsaugoti rezultatus</button>
-                                </div>
-                                <div class="table-responsive">
-                                    <table class="table table-striped table-hover">
-                                        <thead>
-                                            <tr>
-                                                <th>KODAS</th>
-                                                <th>I užd.</th>
-                                                <th>II užd.</th>
-                                                <th>III užd.</th>
-                                                <th>IV užd.</th>
-                                                <th>V užd.</th>
-                                                <th>VI užd.</th>
-                                                <th>VII užd.</th>
-                                                <th>VIII užd.</th>
-                                                <th>IX užd.</th>
-                                                <th>X užd.</th>
-                                                <th>IŠ VISO BALŲ</th>
-                                                <th>VIETA</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($participants as $participant): ?>
-                                                <tr>
-                                                    <td><?php echo $participant['reg_id']; ?></td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>-</td>
-                                                    <td>
-                                                        <input type="number" class="form-control" name="participant[<?php echo $participant['reg_id']; ?>][balai]" value="<?php echo $participant['Balai']; ?>" min="0" max="100">
-                                                    </td>
-                                                    <td>
-                                                        <select class="form-control" name="participant[<?php echo $participant['reg_id']; ?>][vieta]">
-                                                            <option value="">-</option>
-                                                            <option value="I" <?php echo $participant['Vieta'] == 'I' ? 'selected' : ''; ?>>I</option>
-                                                            <option value="II" <?php echo $participant['Vieta'] == 'II' ? 'selected' : ''; ?>>II</option>
-                                                            <option value="III" <?php echo $participant['Vieta'] == 'III' ? 'selected' : ''; ?>>III</option>
-                                                            <option value="laureat." <?php echo $participant['Vieta'] == 'laureat.' ? 'selected' : ''; ?>>Laureatas</option>
-                                                        </select>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </form>
-                        <?php else: ?>
+                        <form action="<?php echo SITE_URL; ?>/modules/reports/evaluation_sheets.php?olympiad=<?php echo urlencode($selected_olympiad); ?>" method="post">
+                            <div class="mb-3">
+                                <button type="submit" name="save_results" class="btn btn-success">Išsaugoti rezultatus</button>
+                            </div>
                             <div class="table-responsive">
-                                <table class="table table-striped table-hover">
-                                    <thead>
+                                <table class="table table-striped table-hover align-middle">
+                                    <thead class="table-light">
                                         <tr>
                                             <th>KODAS</th>
-                                            <th>I užd.</th>
-                                            <th>II užd.</th>
-                                            <th>III užd.</th>
-                                            <th>IV užd.</th>
-                                            <th>V užd.</th>
-                                            <th>VI užd.</th>
-                                            <th>VII užd.</th>
-                                            <th>VIII užd.</th>
-                                            <th>IX užd.</th>
-                                            <th>X užd.</th>
-                                            <th>IŠ VISO BALŲ</th>
-                                            <th>VIETA</th>
+                                            <th>I užd.</th><th>II užd.</th><th>III užd.</th><th>IV užd.</th>
+                                            <th>V užd.</th><th>VI užd.</th><th>VII užd.</th><th>VIII užd.</th>
+                                            <th>IX užd.</th><th>X užd.</th>
+                                            <th style="width: 120px;">IŠ VISO BALŲ</th>
+                                            <th style="width: 150px;">VIETA</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <?php foreach ($participants as $participant): ?>
                                             <tr>
-                                                <td><?php echo $participant['reg_id']; ?></td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td>-</td>
-                                                <td><?php echo $participant['Balai'] ?? '-'; ?></td>
+                                                <td><strong><?php echo $participant['reg_id']; ?></strong></td>
+                                                <td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>
+                                                <td>-</td><td>-</td><td>-</td><td>-</td><td>-</td>
                                                 <td>
-                                                    <?php if (!empty($participant['Vieta'])): ?>
-                                                        <span class="badge bg-primary"><?php echo $participant['Vieta']; ?></span>
-                                                    <?php else: ?>
-                                                        -
-                                                    <?php endif; ?>
+                                                    <input type="text" class="form-control form-control-sm" name="participant[<?php echo $participant['reg_id']; ?>][balai]" value="<?php echo htmlspecialchars($participant['Balai']); ?>">
+                                                </td>
+                                                <td>
+                                                    <select class="form-select form-select-sm" name="participant[<?php echo $participant['reg_id']; ?>][vieta]">
+                                                        <option value="">-</option>
+                                                        <option value="I" <?php echo $participant['Vieta'] == 'I' ? 'selected' : ''; ?>>I</option>
+                                                        <option value="II" <?php echo $participant['Vieta'] == 'II' ? 'selected' : ''; ?>>II</option>
+                                                        <option value="III" <?php echo $participant['Vieta'] == 'III' ? 'selected' : ''; ?>>III</option>
+                                                        <option value="laureat." <?php echo $participant['Vieta'] == 'laureat.' ? 'selected' : ''; ?>>Laureatas</option>
+                                                    </select>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>
                                 </table>
                             </div>
-                        <?php endif; ?>
-                        <p class="mt-3">Dalyvių skaičius: <?php echo $participant_count; ?></p>
+                            <div class="mt-3">
+                                <button type="submit" name="save_results" class="btn btn-success">Išsaugoti rezultatus</button>
+                            </div>
+                        </form>
+                        <p class="mt-3 text-muted">Iš viso vertinamų darbų: <strong><?php echo $participant_count; ?></strong></p>
                     <?php elseif (!empty($selected_olympiad)): ?>
-                        <div class="alert alert-info">
-                            <p>Nėra užregistruotų dalyvių šioje olimpiadoje.</p>
-                        </div>
+                        <div class="alert alert-info">Nėra užregistruotų dalyvių šioje olimpiadoje.</div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -376,7 +207,4 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
     </div>
 </div>
 
-<?php
-// Įtraukiame poraštę
-require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php';
-?>
+<?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>

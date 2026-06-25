@@ -1,8 +1,7 @@
 <?php
 /**
  * Dalyvių registracijos puslapis
- * 
- * Šis failas leidžia registruoti dalyvius į pasirinktą olimpiadą
+ * * Šis failas leidžia registruoti dalyvius į pasirinktą olimpiadą
  */
 
 // Įtraukiame konfigūracijos failus
@@ -26,8 +25,8 @@ $olympiad_id = sanitize_input($_GET['olympiad_id']);
 
 // Gauname olimpiados informaciją
 $sql = "SELECT * FROM konkursai WHERE konk_id = ?";
-$stmt = db_query($sql, [$olympiad_id]);
-$olympiad = db_get_row($stmt);
+$stmt = db_query($sql, [$olympiad_id], 'i');
+$olympiad = $stmt ? db_get_row($stmt) : null;
 
 if (!$olympiad) {
     set_message('Olimpiada nerasta', 'error');
@@ -40,80 +39,66 @@ if ($olympiad['status'] != 0) {
     redirect(SITE_URL . '/modules/registration/index.php');
 }
 
-// Gauname vartotojo priskirtą mokyklą (tik informacijai)
+// Gauname vartotojo priskirtą mokyklą
 $sql = "SELECT var_mokykla FROM vartotojas WHERE vart_id = ?";
-$stmt = db_query($sql, [$_SESSION['user_id']]);
-$user = db_get_row($stmt);
+$stmt = db_query($sql, [$_SESSION['user_id']], 's');
+$user = $stmt ? db_get_row($stmt) : null;
 $school = $user['var_mokykla'] ?? '';
-
-// Patikriname, ar $school egzistuoja mokyklų sąraše
-$defaultSchoolSet = false;
-if (empty($school)) {
-    error_log('Vartotojo mokykla nerasta arba tuščia.');
-}
 
 // Gauname mokyklų sąrašą
 $sql = "SELECT pavadinimas FROM mokyklos ORDER BY pavadinimas ASC";
 $stmt = db_query($sql);
-$mokyklos = db_get_results($stmt);
-
-// Diagnostika mokyklų gavimui
-if (!$mokyklos) {
-    error_log('Nepavyko gauti mokyklų sąrašo: ' . (db_connect()->error ?: 'Tuščias rezultatas'));
-} else {
-    error_log('Gauta mokyklų: ' . count($mokyklos));
-}
+$mokyklos = $stmt ? db_get_results($stmt) : [];
 
 // Gauname klases
 $sql = "SELECT * FROM klases ORDER BY klases ASC";
 $stmt = db_query($sql);
-$classes = db_get_results($stmt);
+$classes = $stmt ? db_get_results($stmt) : [];
 
 // Gauname mokytojų kvalifikacijas
 $sql = "SELECT * FROM kvalifikacijos ORDER BY kategorija ASC";
 $stmt = db_query($sql);
-$qualifications = db_get_results($stmt);
+$qualifications = $stmt ? db_get_results($stmt) : [];
 
 // Apdorojame formą
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Diagnostika
-    error_log('POST data at ' . date('Y-m-d H:i:s') . ': ' . print_r($_POST, true));
-    var_dump($_POST);
+    // Saugumo patikra: CSRF žetonas
+    if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
+        set_message('Netinkamas sesijos žetonas (CSRF).', 'error');
+        redirect(current_url());
+    }
 
-    // Tikriname ar užpildyti visi laukai
+    // Tikriname ar užpildyti visi privalomi laukai
     if (empty($_POST['_vardas']) || empty($_POST['_pavarde']) || empty($_POST['_klase']) || empty($_POST['_mok']) || empty($_POST['_mok_kvali']) || empty($_POST['_mokykla'])) {
-        set_message('Prašome užpildyti visus privalomus laukus. Debug: vardas=' . ($_POST['_vardas'] ?? 'tuščias') . ', pavarde=' . ($_POST['_pavarde'] ?? 'tuščias') . ', klase=' . ($_POST['_klase'] ?? 'tuščias') . ', mok=' . ($_POST['_mok'] ?? 'tuščias') . ', mok_kvali=' . ($_POST['_mok_kvali'] ?? 'tuščias') . ', mokykla=' . ($_POST['_mokykla'] ?? 'tuščias'), 'error');
+        set_message('Prašome užpildyti visus privalomus laukus.', 'error');
     } else {
         // Paruošiame duomenis
         $data = [
             'konkurso_pav' => $olympiad['konkurso_pav'],
-            'var_mokykla' => sanitize_input($_POST['_mokykla']),
-            'pil_data' => date('Y-m-d H:i:s'),
-            '1_vardas' => sanitize_input($_POST['_vardas']),
-            '1_pavarde' => sanitize_input($_POST['_pavarde']),
-            '1_klase' => sanitize_input($_POST['_klase']),
-            '1_mok' => sanitize_input($_POST['_mok']),
-            '1_mok_kvali' => sanitize_input($_POST['_mok_kvali']),
-            '2_mok' => sanitize_input($_POST['2_mok']),
-            '2_mok_kvali' => sanitize_input($_POST['2_mok_kvali']),
-            'vart_id' => $_SESSION['user_id'],
-            'inf_1' => isset($_POST['inf_1']) ? sanitize_input($_POST['inf_1']) : '',
-            'inf_2' => '',
-            'Balai' => '',
-            'Vieta' => ''
+            'var_mokykla'  => sanitize_input($_POST['_mokykla']),
+            'pil_data'     => date('Y-m-d H:i:s'),
+            '1_vardas'     => sanitize_input($_POST['_vardas']),
+            '1_pavarde'    => sanitize_input($_POST['_pavarde']),
+            '1_klase'      => sanitize_input($_POST['_klase']),
+            '1_mok'        => sanitize_input($_POST['_mok']),
+            '1_mok_kvali'  => sanitize_input($_POST['_mok_kvali']),
+            '2_mok'        => !empty($_POST['2_mok']) ? sanitize_input($_POST['2_mok']) : '',
+            '2_mok_kvali'  => !empty($_POST['2_mok_kvali']) ? sanitize_input($_POST['2_mok_kvali']) : '',
+            'vart_id'      => $_SESSION['user_id'],
+            'inf_1'        => isset($_POST['inf_1']) ? sanitize_input($_POST['inf_1']) : '',
+            'inf_2'        => '',
+            'Balai'        => '',
+            'Vieta'        => ''
         ];
         
-        // Papildoma diagnostika
-        error_log('Data to insert at ' . date('Y-m-d H:i:s') . ': ' . print_r($data, true));
-        
-        // Įterpiame duomenis
+        // Įterpiame duomenis naudojant saugią sisteminę db_insert funkciją
         $result = db_insert('dalyviai', $data);
         
         if ($result) {
             set_message('Dalyvis sėkmingai užregistruotas', 'success');
             redirect(SITE_URL . '/modules/olympiads/view.php?id=' . $olympiad_id);
         } else {
-            set_message('Klaida registruojant dalyvį: ' . db_connect()->error, 'error');
+            set_message('Sisteminė klaida registruojant dalyvį.', 'error');
         }
     }
 }
@@ -126,137 +111,113 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
     <div class="col-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <h1>Dalyvio registracija</h1>
-                <a href="<?php echo SITE_URL; ?>/modules/olympiads/view.php?id=<?php echo $olympiad_id; ?>" class="btn btn-secondary">Grįžti į olimpiadą</a>
+                <h1 class="h3 mb-0">Dalyvio registracija</h1>
+                <a href="<?php echo SITE_URL; ?>/modules/olympiads/view.php?id=<?php echo $olympiad_id; ?>" class="btn btn-secondary btn-sm">Grįžti į olimpiadą</a>
             </div>
             <div class="card-body">
+                <?php display_message(); ?>
+                
                 <div class="row mb-4">
                     <div class="col-md-6">
-                        <h3>Olimpiados informacija</h3>
-                        <table class="table">
+                        <h5>Olimpiados informacija</h5>
+                        <table class="table table-bordered table-sm">
                             <tr>
                                 <th>Pavadinimas:</th>
-                                <td><?php echo $olympiad['konkurso_pav']; ?></td>
+                                <td><?php echo htmlspecialchars($olympiad['konkurso_pav']); ?></td>
                             </tr>
                             <tr>
                                 <th>Atsakingas:</th>
-                                <td><?php echo $olympiad['atsakingas']; ?></td>
+                                <td><?php echo htmlspecialchars($olympiad['atsakingas']); ?></td>
                             </tr>
                             <tr>
                                 <th>Grupė:</th>
-                                <td><?php echo $olympiad['grupe']; ?></td>
-                            </tr>
-                        </table>
-                    </div>
-                    <div class="col-md-6">
-                        <h3>Mokyklos informacija</h3>
-                        <table class="table">
-                            <tr>
-                                <th>Mokykla *</th>
-                                <td>
-                                    <!-- Laikinas rodymas, kol perkelsime į formą -->
-                                    <?php echo $school; ?>
-                                </td>
+                                <td><?php echo htmlspecialchars($olympiad['grupe']); ?></td>
                             </tr>
                         </table>
                     </div>
                 </div>
                 
-                <h3>Dalyvio informacija</h3>
+                <h4 class="mb-3">Dalyvio informacija</h4>
                 <form action="<?php echo SITE_URL; ?>/modules/registration/register.php?olympiad_id=<?php echo $olympiad_id; ?>" method="post" class="needs-validation" novalidate>
+                    <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+
                     <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group mb-3">
-                                <label for="_vardas" class="form-label">Vardas *</label>
-                                <input type="text" class="form-control" id="_vardas" name="_vardas" required>
-                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="_vardas" class="form-label">Vardas *</label>
+                            <input type="text" class="form-control" id="_vardas" name="_vardas" required>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-group mb-3">
-                                <label for="_pavarde" class="form-label">Pavardė *</label>
-                                <input type="text" class="form-control" id="_pavarde" name="_pavarde" required>
-                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="_pavarde" class="form-label">Pavardė *</label>
+                            <input type="text" class="form-control" id="_pavarde" name="_pavarde" required>
                         </div>
                     </div>
                     
                     <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group mb-3">
-                                <label for="_klase" class="form-label">Klasė *</label>
-                                <select class="form-control" id="_klase" name="_klase" required>
-                                    <?php foreach ($classes as $class): ?>
-                                        <option value="<?php echo $class['klases']; ?>"><?php echo $class['klases']; ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="_klase" class="form-label">Klasė *</label>
+                            <select class="form-select" id="_klase" name="_klase" required>
+                                <option value="">Pasirinkite klasę...</option>
+                                <?php foreach ($classes as $class): ?>
+                                    <option value="<?php echo htmlspecialchars($class['klases']); ?>"><?php echo htmlspecialchars($class['klases']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-group mb-3">
-                                <label for="_mokykla" class="form-label">Mokykla *</label>
-                                <select class="form-control" id="_mokykla" name="_mokykla" required>
-                                    <?php foreach ($mokyklos as $mokykla): ?>
-                                        <option value="<?php echo htmlspecialchars($mokykla['pavadinimas']); ?>" 
-                                                <?php echo (!empty($school) && $school === $mokykla['pavadinimas']) ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($mokykla['pavadinimas']); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="_mokykla" class="form-label">Mokykla *</label>
+                            <select class="form-select" id="_mokykla" name="_mokykla" required>
+                                <option value="">Pasirinkite mokyklą...</option>
+                                <?php foreach ($mokyklos as $m): ?>
+                                    <option value="<?php echo htmlspecialchars($m['pavadinimas']); ?>" 
+                                            <?php echo (!empty($school) && $school === $m['pavadinimas']) ? 'selected' : ''; ?>>
+                                        <?php echo htmlspecialchars($m['pavadinimas']); ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                     </div>
                     
                     <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group mb-3">
-                                <label for="_mok" class="form-label">Mokytojo vardas, pavardė *</label>
-                                <input type="text" class="form-control" id="_mok" name="_mok" required>
-                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="_mok" class="form-label">Mokytojo vardas, pavardė *</label>
+                            <input type="text" class="form-control" id="_mok" name="_mok" required>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-group mb-3">
-                                <label for="_mok_kvali" class="form-label">Mokytojo kvalifikacija *</label>
-                                <select class="form-control" id="_mok_kvali" name="_mok_kvali" required>
-                                    <?php foreach ($qualifications as $qualification): ?>
-                                        <option value="<?php echo $qualification['kategorija']; ?>"><?php echo $qualification['kategorija']; ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="_mok_kvali" class="form-label">Mokytojo kvalifikacija *</label>
+                            <select class="form-select" id="_mok_kvali" name="_mok_kvali" required>
+                                <option value="">Pasirinkite kvalifikaciją...</option>
+                                <?php foreach ($qualifications as $q): ?>
+                                    <option value="<?php echo htmlspecialchars($q['kategorija']); ?>"><?php echo htmlspecialchars($q['kategorija']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                     </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group mb-3">
-                                <label for="_mok" class="form-label">Antro mokytojo vardas, pavardė</label>
-                                <input type="text" class="form-control" id="2_mok" name="2_mok" >
-                            </div>
+
+                    <div class="row border-top pt-3 mt-2">
+                        <div class="col-md-6 mb-3">
+                            <label for="2_mok" class="form-label">Antro mokytojo vardas, pavardė (neprivaloma)</label>
+                            <input type="text" class="form-control" id="2_mok" name="2_mok">
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-group mb-3">
-                                <label for="_mok_kvali" class="form-label">Antro mokytojo kvalifikacija</label>
-                                <select class="form-control" id="2_mok_kvali" name="2_mok_kvali" >
-                                    <?php foreach ($qualifications as $qualification): ?>
-                                        <option value="<?php echo $qualification['kategorija']; ?>"><?php echo $qualification['kategorija']; ?></option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="2_mok_kvali" class="form-label">Antro mokytojo kvalifikacija (neprivaloma)</label>
+                            <select class="form-select" id="2_mok_kvali" name="2_mok_kvali">
+                                <option value="">Nėra</option>
+                                <?php foreach ($qualifications as $q): ?>
+                                    <option value="<?php echo htmlspecialchars($q['kategorija']); ?>"><?php echo htmlspecialchars($q['kategorija']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
                     </div>
                     
-                    <div class="form-group mb-3">
+                    <div class="form-group mb-4">
                         <label for="inf_1" class="form-label">Papildoma informacija</label>
                         <textarea class="form-control" id="inf_1" name="inf_1" rows="3"></textarea>
                     </div>
                     
-                    <div class="form-group">
-                        <button type="submit" class="btn btn-primary">Registruoti dalyvį</button>
-                    </div>
+                    <button type="submit" class="btn btn-primary btn-lg">Registruoti dalyvį</button>
                 </form>
             </div>
         </div>
     </div>
 </div>
 
-<?php
-// Įtraukiame poraštę
-require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php';
-?>
+<?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>
