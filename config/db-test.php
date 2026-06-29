@@ -1,7 +1,7 @@
 <?php
 $host = 'localhost';
-$user = 'testlt_oli';
-$pass = 'olimipic=0LI'; // Pakeiskite į tikrąjį slaptažodį
+$user = '00000000';
+$pass = '00000000'; // Pakeiskite į tikrąjį slaptažodį
 $db = 'testlt_olimpiados';
 
 $conn = new mysqli($host, $user, $pass, $db);
