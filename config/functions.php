@@ -4,11 +4,6 @@
  * * Šiame faile saugomos bendros funkcijos, naudojamos visoje sistemoje
  */
 
-/**
- * Saugus įvesties filtravimas
- * * @param string $data Įvesties duomenys
- * @return string Išvalyti duomenys
- */
 function sanitize_input($data) {
     $data = trim($data);
     $data = stripslashes($data);
@@ -16,28 +11,14 @@ function sanitize_input($data) {
     return $data;
 }
 
-/**
- * Slaptažodžio šifravimas
- * * @param string $password Slaptažodis
- * @return string Šifruotas slaptažodis
- */
 function hash_password($password) {
     return password_hash($password, PASSWORD_DEFAULT);
 }
 
-/**
- * Slaptažodžio tikrinimas
- * * @param string $password Slaptažodis
- * @param string $hash Užšifruotas slaptažodis
- * @return bool Grąžina true jei slaptažodis teisingas
- */
 function verify_password($password, $hash) {
     return password_verify($password, $hash);
 }
 
-/**
- * Sesijos inicijavimas
- */
 function start_session() {
     if (session_status() == PHP_SESSION_NONE) {
         session_name(SESSION_NAME);
@@ -45,65 +26,35 @@ function start_session() {
     }
 }
 
-/**
- * Patikrinti ar vartotojas prisijungęs
- * * @return bool Grąžina true jei vartotojas prisijungęs
- */
 function is_logged_in() {
     start_session();
     return isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
 }
 
-/**
- * Patikrinti ar vartotojas turi administratoriaus teises
- * * @return bool Grąžina true jei vartotojas turi administratoriaus teises
- */
 function is_admin() {
     start_session();
     return isset($_SESSION['user_level']) && $_SESSION['user_level'] == 'admin';
 }
 
-/**
- * Nukreipti vartotoją į kitą puslapį
- * * @param string $url URL adresas
- */
 function redirect($url) {
     header("Location: $url");
     exit;
 }
 
-/**
- * Generuoti atsitiktinį slaptažodį
- * * @param int $length Slaptažodžio ilgis
- * @return string Sugeneruotas slaptažodis
- */
 function generate_password($length = 8) {
     $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     $password = '';
-    
     for ($i = 0; $i < $length; $i++) {
         $password .= $chars[rand(0, strlen($chars) - 1)];
     }
-    
     return $password;
 }
 
-/**
- * Formatuoti datą lietuvišku formatu
- * * @param string $date Data
- * @param string $format Formatas
- * @return string Suformatuota data
- */
 function format_date($date, $format = 'Y-m-d H:i:s') {
     $datetime = new DateTime($date);
     return $datetime->format($format);
 }
 
-/**
- * Generuoti pranešimą
- * * @param string $message Pranešimo tekstas
- * @param string $type Pranešimo tipas (success, error, warning, info)
- */
 function set_message($message, $type = 'info') {
     start_session();
     $_SESSION['message'] = [
@@ -112,81 +63,47 @@ function set_message($message, $type = 'info') {
     ];
 }
 
-/**
- * Gauti pranešimą
- * * @return array|null Pranešimas arba null jei nėra
- */
 function get_message() {
     start_session();
-    
     if (isset($_SESSION['message'])) {
         $message = $_SESSION['message'];
         unset($_SESSION['message']);
         return $message;
     }
-    
     return null;
 }
 
-/**
- * Rodyti pranešimą
- */
 function display_message() {
     $message = get_message();
-    
     if ($message) {
         $type_class = 'alert-' . $message['type'];
         echo "<div class='alert $type_class'>{$message['text']}</div>";
     }
 }
 
-/**
- * Generuoti CSRF žetoną
- * * @return string CSRF žetonas
- */
 function generate_csrf_token() {
     start_session();
-    
     if (!isset($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
-    
     return $_SESSION['csrf_token'];
 }
 
-/**
- * Tikrinti CSRF žetoną
- * * @param string $token CSRF žetonas
- * @return bool Grąžina true jei žetonas teisingas
- */
 function verify_csrf_token($token) {
     start_session();
-    
     if (!isset($_SESSION['csrf_token']) || $token !== $_SESSION['csrf_token']) {
         return false;
     }
-    
     return true;
 }
 
-/**
- * Gauti dabartinį URL
- * * @return string Dabartinis URL
- */
 function current_url() {
     $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
     $host = $_SERVER['HTTP_HOST'];
     $uri = $_SERVER['REQUEST_URI'];
-    
     return "$protocol://$host$uri";
 }
 
-/**
- * Patikrinti ar masyvas turi visus reikiamus raktus
- * * @param array $array Masyvas
- * @param array $keys Raktai
- * @return bool Grąžina true jei turi visus raktus, kitaip false
- */
 function has_all_keys($array, $keys) {
     foreach ($keys as $key) {
         if (!array_key_exists($key, $array)) {
@@ -196,18 +113,7 @@ function has_all_keys($array, $keys) {
     return true;
 }
 
-/**
- * Lentelės spausdinimo funkcija
- * * Ši funkcija generuoja spausdinamą lentelę su antrašte, parašo vieta ir puslapių numeracija
- * * @param string $title Dokumento pavadinimas
- * @param string $institution Įstaigos pavadinimas
- * @param array $headers Lentelės antraštės
- * @param array $data Lentelės duomenys
- * @param array $options Papildomos parinktys (neprivaloma)
- * @return string HTML kodas spausdinimui
- */
 function generate_printable_table($title, $institution, $headers, $data, $options = []) {
-    // Nustatome numatytąsias parinktis
     $default_options = [
         'date_format' => 'Y-m-d',
         'signature_text' => 'Parašas',
@@ -219,53 +125,31 @@ function generate_printable_table($title, $institution, $headers, $data, $option
         'include_print_button' => true,
         'include_back_button' => true
     ];
-    
-    // Sujungiame numatytąsias parinktis su vartotojo pateiktomis
     $options = array_merge($default_options, $options);
-    
-    // Generuojame unikalų ID spausdinimo mygtukui
     $print_id = 'print_' . uniqid();
-    
-    // Pradedame HTML kodą
     $html = '<div id="' . $print_id . '_container">';
-    
-    // Pridedame mygtukus
     if ($options['include_print_button'] || $options['include_back_button']) {
         $html .= '<div class="d-print-none mb-3">';
-        
         if ($options['include_print_button']) {
             $html .= '<button onclick="window.print();" class="btn btn-primary me-2">' . $options['print_button_text'] . '</button>';
         }
-        
         if ($options['include_back_button']) {
             $html .= '<button onclick="window.history.back();" class="btn btn-secondary">' . $options['back_button_text'] . '</button>';
         }
-        
         $html .= '</div>';
     }
-    
-    // Pradedame spausdinamą dalį
     $html .= '<div id="' . $print_id . '_printable" style="counter-reset: page 0;">';
-    
-    // Pridedame antraštę
     $html .= '<div class="text-center mb-4">';
     $html .= '<h3>' . htmlspecialchars($institution) . '</h3>';
     $html .= '<h4>' . htmlspecialchars($title) . '</h4>';
     $html .= '<p>Spausdinimo data: ' . date($options['date_format']) . '</p>';
     $html .= '</div>';
-    
-    // Pridedame lentelę
     $html .= '<table class="' . $options['table_class'] . '">';
-    
-    // Lentelės antraštė
     $html .= '<thead><tr>';
     foreach ($headers as $header) {
         $html .= '<th>' . htmlspecialchars($header) . '</th>';
     }
-    $html .= '</tr></thead>';
-    
-    // Lentelės duomenys
-    $html .= '<tbody>';
+    $html .= '</tr></thead><tbody>';
     foreach ($data as $row) {
         $html .= '<tr>';
         foreach ($row as $cell) {
@@ -273,60 +157,24 @@ function generate_printable_table($title, $institution, $headers, $data, $option
         }
         $html .= '</tr>';
     }
-    $html .= '</tbody>';
-    
-    $html .= '</table>';
-    
-    // Pridedame parašo vietą
-    $html .= '<div class="mt-5">';
-    $html .= '<div class="row">';
-    $html .= '<div class="col-6">';
+    $html .= '</tbody></table>';
+    $html .= '<div class="mt-5"><div class="row"><div class="col-6">';
     $html .= '<p>' . $options['signature_text'] . ' ___________________</p>';
     if (!empty($options['signature_name'])) {
         $html .= '<p>' . htmlspecialchars($options['signature_name']) . '</p>';
     }
-    $html .= '</div>';
-    $html .= '</div>';
-    $html .= '</div>';
-    
-    // Baigiame spausdinamą dalį
-    $html .= '</div>';
-    
-    // Baigiame konteinerį
-    $html .= '</div>';
-    
-    // Pridedame CSS stilius
+    $html .= '</div></div></div></div></div>';
     $html .= '<style>
         @media print {
-            body {
-                padding: 20mm;
-            }
-            .d-print-none {
-                display: none !important;
-            }
-            .page-number:before {
-                content: counter(page);
-            }
-            @page {
-                size: A4;
-                margin: 20mm;
-                counter-increment: page;
-            }
-            table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-            table th, table td {
-                border: 1px solid #000;
-                padding: 8px;
-            }
-            table th {
-                background-color: #f2f2f2;
-            }
+            body { padding: 20mm; }
+            .d-print-none { display: none !important; }
+            .page-number:before { content: counter(page); }
+            @page { size: A4; margin: 20mm; counter-increment: page; }
+            table { width: 100%; border-collapse: collapse; }
+            table th, table td { border: 1px solid #000; padding: 8px; }
+            table th { background-color: #f2f2f2; }
         }
     </style>';
-    
-    // Pridedame JavaScript, kad užtikrintume puslapio numerį bent 1
     $html .= '<script>
         document.addEventListener("DOMContentLoaded", function() {
             var pageNumberSpans = document.getElementsByClassName("page-number");
@@ -337,39 +185,21 @@ function generate_printable_table($title, $institution, $headers, $data, $option
             }
         });
     </script>';
-    
     return $html;
 }
 
-/**
- * === KALENDORIUS – JŪSŲ KONKURSAI (be warning'ų) ===
- * konk_id | konkurso_pav | status (0=aktyvus, 1=neaktyvus) | data
- */
-
 function get_konkursai_events() {
     $conn = db_connect();
-    
     $result = $conn->query("
         SELECT 
-            konk_id,
-            konkurso_pav,
-            COALESCE(data, NULL) AS data,
-            status,
-            grupe
-        FROM konkursai 
-        ORDER BY data ASC, konk_id ASC
+            konk_id, konkurso_pav, COALESCE(data, NULL) AS data, status, grupe
+        FROM konkursai ORDER BY data ASC, konk_id ASC
     ");
-
-    if (!$result) {
-        error_log("Kalendoriaus klaida: " . $conn->error);
-        return [];
-    }
-
+    if (!$result) { return []; }
     $events = [];
     while ($row = $result->fetch_assoc()) {
-        $is_active = ($row['status'] ?? 1) == 0; // 0 = aktyvus
+        $is_active = ($row['status'] ?? 1) == 0;
         $has_date = !empty($row['data']) && $row['data'] !== '0000-00-00';
-
         $event = [
             'id' => $row['konk_id'],
             'title' => ($row['konkurso_pav'] ?? 'Be pavadinimo') . ' (' . ($row['grupe'] ?? 'Nėra grupės') . ')',
@@ -378,24 +208,19 @@ function get_konkursai_events() {
             'textColor' => 'white',
             'url' => SITE_URL . '/modules/olympiads/view.php?id=' . $row['konk_id']
         ];
-
         if ($has_date) {
             $event['start'] = $row['data'];
         } else {
             $event['start'] = null;
-            $event['display'] = 'list-item'; // rodo sąraše
+            $event['display'] = 'list-item';
         }
-
         $events[] = $event;
     }
-
     return $events;
 }
 
 function display_konkursai_calendar() {
     $events = get_konkursai_events();
-    $active_count = count(array_filter($events, fn($e) => $e['backgroundColor'] == '#28a745'));
-    $inactive_count = count($events) - $active_count;
     $events_with_date = array_filter($events, fn($e) => $e['start'] !== null);
     $events_json = json_encode($events_with_date, JSON_UNESCAPED_UNICODE);
     ?>
@@ -408,53 +233,19 @@ function display_konkursai_calendar() {
         <style>
             body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; background: #f8f9fa; }
             .container { max-width: 1200px; margin: 20px auto; padding: 0 15px; }
-            .header { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; margin-bottom: 20px; }
-            .stats { display: flex; justify-content: center; gap: 25px; margin-top: 15px; flex-wrap: wrap; }
-            .stat { background: white; padding: 15px 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); min-width: 100px; }
-            .stat.active { border-left: 5px solid #28a745; }
-            .stat.inactive { border-left: 5px solid #6c757d; }
-            .stat-number { font-size: 2em; font-weight: bold; margin: 5px 0; }
-            .stat-label { color: #666; font-size: 0.85em; }
             #calendar { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
             .fc-event { border-radius: 6px; font-weight: 500; font-size: 0.9em; }
-            .fc-list-event-title { font-weight: 500; }
         </style>
     </head>
     <body>
-        <div class="container">
-            <div id="calendar"></div>
-        </div>
-
+        <div class="container"><div id="calendar"></div></div>
         <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
         <script>
             document.addEventListener('DOMContentLoaded', function() {
-                var calendarEl = document.getElementById('calendar');
-                var calendar = new FullCalendar.Calendar(calendarEl, {
-                    initialView: 'dayGridMonth',
-                    locale: 'lt',
-                    timeZone: 'Europe/Vilnius',
-                    headerToolbar: {
-                        left: 'prev,next today',
-                        center: 'title',
-                        right: 'dayGridMonth,timeGridWeek,listMonth'
-                    },
-                    buttonText: {
-                        today: 'Šiandien',
-                        month: 'Mėnuo',
-                        week: 'Savaitė',
-                        list: 'Sąrašas'
-                    },
+                var calendar = new FullCalendar.Calendar(document.getElementById('calendar'), {
+                    initialView: 'dayGridMonth', locale: 'lt', timeZone: 'Europe/Vilnius',
                     events: <?php echo $events_json; ?>,
-                    eventClick: function(info) {
-                        if (info.event.url) {
-                            window.location.href = info.event.url;
-                        }
-                    },
-                    eventDidMount: function(info) {
-                        if (!info.event.start) {
-                            info.el.style.opacity = '0.8';
-                        }
-                    }
+                    eventClick: function(info) { if (info.event.url) window.location.href = info.event.url; }
                 });
                 calendar.render();
             });
@@ -463,32 +254,119 @@ function display_konkursai_calendar() {
     </html>
     <?php
 }
-/**
- * Įrašo įvykį į sistemos žurnalą
- * * @param string $action Veiksmo pavadinimas (pvz., 'Prisijungimas', 'Klaida', 'Vartotojo trynimas')
- * @param string $details Išsami informacija (neprivaloma)
- */
+
 function log_action($action, $details = '') {
     start_session();
-    
-    // Gauname vartotojo ID, jei jis prisijungęs
     $user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'Svečias';
-    
-    // Gauname IP adresą, atsižvelgiant į galimus proxy (Cloudflare ir pan.)
     $ip_address = $_SERVER['REMOTE_ADDR'] ?? 'Nežinomas IP';
     if (array_key_exists('HTTP_X_FORWARDED_FOR', $_SERVER)) {
         $ip_address = $_SERVER['HTTP_X_FORWARDED_FOR'];
     }
-    
     $data = [
         'user_id' => $user_id,
         'action' => sanitize_input($action),
         'details' => sanitize_input($details),
-        'ip_address' => sanitize_input($ip_address),
-        'created_at' => date('Y-m-d H:i:s')
+        'ip_address' => sanitize_input($ip_address)
     ];
-    
-    // Naudojame db_insert įrašymui į duomenų bazę
     db_insert('system_logs', $data);
+}
+
+/**
+ * =====================================================================
+ * PUSLAPIAVIMO IR RIKIAVIMO (PAGINATION & SORTING) PAGALBINĖS FUNKCIJOS
+ * =====================================================================
+ */
+
+/**
+ * Generuoja URL pridedant arba pakeičiant GET parametrus
+ */
+function build_url_with_params($new_params) {
+    $query_params = $_GET;
+    foreach ($new_params as $key => $value) {
+        $query_params[$key] = $value;
+    }
+    return '?' . http_build_query($query_params);
+}
+
+/**
+ * Generuoja rikiuojamą lentelės antraštę (HTML)
+ */
+function generate_sortable_header($column_db_name, $label, $current_sort, $current_dir) {
+    // Jei paspaudžiama ant jau rikiuojamo stulpelio, keičiame kryptį. Kitaip - numatytoji ASC.
+    $next_dir = ($current_sort === $column_db_name && $current_dir === 'ASC') ? 'DESC' : 'ASC';
+    $url = build_url_with_params(['sort' => $column_db_name, 'dir' => $next_dir, 'page' => 1]); // Keičiant rikiavimą grąžiname į 1 puslapį
+    
+    $icon = '';
+    if ($current_sort === $column_db_name) {
+        $icon = $current_dir === 'ASC' ? '&nbsp;<i class="fas fa-sort-up"></i>' : '&nbsp;<i class="fas fa-sort-down"></i>';
+    } else {
+        $icon = '&nbsp;<i class="fas fa-sort text-muted" style="opacity: 0.3;"></i>';
+    }
+
+    return "<a href=\"{$url}\" class=\"text-dark text-decoration-none\">{$label}{$icon}</a>";
+}
+
+/**
+ * Generuoja puslapiavimo elementus (HTML) ir limito pasirinkimą
+ */
+function render_pagination($total_items, $limit, $current_page) {
+    $total_pages = ceil($total_items / $limit);
+    if ($total_pages <= 1 && $total_items <= 10) return ''; // Nerodome jei nėra prasmės
+
+    $limits = [10, 25, 50, 100];
+    
+    echo '<div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-3">';
+    
+    // Limito pasirinkimas (puslapyje rodomų elementų skaičius)
+    echo '<div class="d-flex align-items-center">';
+    echo '<span class="me-2 text-muted">Rodyti:</span>';
+    echo '<select class="form-select form-select-sm w-auto" onchange="window.location.href=this.value;">';
+    foreach ($limits as $l) {
+        $url = build_url_with_params(['limit' => $l, 'page' => 1]);
+        $selected = ($l == $limit) ? 'selected' : '';
+        echo "<option value=\"{$url}\" {$selected}>{$l}</option>";
+    }
+    echo '</select>';
+    echo "<span class=\"ms-3 text-muted small\">Iš viso: <strong>{$total_items}</strong></span>";
+    echo '</div>';
+
+    // Puslapiai (1, 2, 3...)
+    if ($total_pages > 1) {
+        echo '<nav aria-label="Page navigation">';
+        echo '<ul class="pagination pagination-sm mb-0">';
+        
+        // Atgal mygtukas
+        $prev_disabled = ($current_page <= 1) ? 'disabled' : '';
+        $prev_url = build_url_with_params(['page' => max(1, $current_page - 1)]);
+        echo "<li class=\"page-item {$prev_disabled}\"><a class=\"page-link\" href=\"{$prev_url}\">&laquo;</a></li>";
+        
+        // Puslapių numeriai (rodome protingą rėžį, kad nebūtų 100 mygtukų)
+        $start_page = max(1, $current_page - 2);
+        $end_page = min($total_pages, $current_page + 2);
+        
+        if ($start_page > 1) {
+            echo "<li class=\"page-item\"><a class=\"page-link\" href=\"" . build_url_with_params(['page' => 1]) . "\">1</a></li>";
+            if ($start_page > 2) echo "<li class=\"page-item disabled\"><span class=\"page-link\">...</span></li>";
+        }
+
+        for ($i = $start_page; $i <= $end_page; $i++) {
+            $active = ($i == $current_page) ? 'active' : '';
+            $url = build_url_with_params(['page' => $i]);
+            echo "<li class=\"page-item {$active}\"><a class=\"page-link\" href=\"{$url}\">{$i}</a></li>";
+        }
+
+        if ($end_page < $total_pages) {
+            if ($end_page < $total_pages - 1) echo "<li class=\"page-item disabled\"><span class=\"page-link\">...</span></li>";
+            echo "<li class=\"page-item\"><a class=\"page-link\" href=\"" . build_url_with_params(['page' => $total_pages]) . "\">{$total_pages}</a></li>";
+        }
+
+        // Pirmyn mygtukas
+        $next_disabled = ($current_page >= $total_pages) ? 'disabled' : '';
+        $next_url = build_url_with_params(['page' => min($total_pages, $current_page + 1)]);
+        echo "<li class=\"page-item {$next_disabled}\"><a class=\"page-link\" href=\"{$next_url}\">&raquo;</a></li>";
+        
+        echo '</ul></nav>';
+    }
+    echo '</div>';
 }
 ?>

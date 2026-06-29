@@ -1,0 +1,32 @@
+# 1. UŽDRAUDŽIAME NARŠYTI PO KATALOGUS (Directory Listing)
+# Jei aplanke nėra index.php failo, serveris nerodys failų sąrašo
+Options -Indexes
+
+# 2. APSAUGOME JAUTRIUS FAILUS
+# Neleidžiame iš išorės pasiekti SQL bazių kopijų, aplinkos kintamųjų (.env), logų ir kt.
+<FilesMatch "\.(env|sql|txt|json|md|log|ini|sh|bak|backup)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# 3. BLOKUOJAME TIESIOGINĘ PRIEIGĄ PRIE SISTEMINIŲ KATALOGŲ
+# Vartotojai negalės per naršyklę atidaryti /config/ ar /vendor/ failų
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    
+    # Blokuojame config aplanką
+    RewriteRule ^config/(.*)$ - [F,L]
+    
+    # Blokuojame vendor aplanką (TCPDF ir kt. bibliotekas)
+    RewriteRule ^vendor/(.*)$ - [F,L]
+    
+    # (Pasirinktinai) Galite blokuoti tiesioginį includes failų atidarymą
+    RewriteRule ^includes/(.*)$ - [F,L]
+</IfModule>
+
+# 4. SAUGUMO ANTRAŠTĖS (Apsauga nuo Clickjacking ir XSS atakų)
+<IfModule mod_headers.c>
+    Header set X-Frame-Options "SAMEORIGIN"
+    Header set X-XSS-Protection "1; mode=block"
+    Header set X-Content-Type-Options "nosniff"
+</IfModule>

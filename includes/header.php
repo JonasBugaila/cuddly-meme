@@ -20,6 +20,7 @@ start_session();
 	<!-- BOOTSTRAP CSS -->
     <link rel="stylesheet" href="<?php echo SITE_URL; ?>/assets/css/bootstrap.css">
     <link rel="stylesheet" href="<?php echo SITE_URL; ?>/assets/css/style.css">
+	<script src="/assets/js/bootstrap.bundle.min.js"></script>
 </head>
 <body>
     <header class="header">

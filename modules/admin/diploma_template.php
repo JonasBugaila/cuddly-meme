@@ -50,7 +50,7 @@ if (file_exists($template_file)) {
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 ?>
 
-<script src="http://olimpiada.sprendimas.eu/assets/js/tinymce.min.js" referrerpolicy="origin"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tinymce/6.8.2/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
   tinymce.init({
     selector: '#template_content',
