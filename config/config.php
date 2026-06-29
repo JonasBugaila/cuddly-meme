@@ -7,8 +7,8 @@
 
 // Duomenų bazės konfigūracija
 define('DB_HOST', 'localhost');
-define('DB_USER', 'testlt_oli');
-define('DB_PASS', 'olimipic=0LI');
+define('DB_USER', '********');
+define('DB_PASS', '*******');
 define('DB_NAME', 'testlt_olimpidos');
 
 // Sistemos konfigūracija
