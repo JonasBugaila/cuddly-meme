@@ -1,98 +1,103 @@
 <?php
 /**
  * Pagrindinis puslapis
- * 
- * Šis failas yra pagrindinis sistemos puslapis
+ * * Šis failas yra pagrindinis sistemos puslapis
  */
 
-// Įtraukiame antraštę
+// Įtraukiame antraštę (kuri taip pat užkrauna config.php, funkcijas ir t.t.)
 require_once dirname(__FILE__) . '/includes/header.php';
 ?>
 
 <div class="row">
     <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <h1>Olimpiadų sistema</h1>
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-primary text-white">
+                <h1 class="h3 mb-0"><i class="fas fa-home"></i> Olimpiadų sistema</h1>
             </div>
             <div class="card-body">
                 
                 <?php if (!is_logged_in()): ?>
                     <div class="alert alert-info">
-                        <p>Norėdami naudotis sistema, prašome <a href="<?php echo SITE_URL; ?>/modules/auth/login.php">prisijungti</a>.</p>
+                        <p class="mb-0">Norėdami naudotis sistema, prašome <a href="<?php echo SITE_URL; ?>/modules/auth/login.php" class="fw-bold">prisijungti</a>.</p>
                     </div>
                 <?php else: ?>
                     <div class="row mt-4">
-                        <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h3>Aktyvios olimpiados</h3>
+                        
+                        <div class="col-md-6 mb-4 mb-md-0">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-header bg-light">
+                                    <h3 class="h5 mb-0"><i class="fas fa-trophy text-warning"></i> Aktyvios olimpiados</h3>
                                 </div>
                                 <div class="card-body">
                                     <?php
-                                    // Gauname aktyvias olimpiadas
                                     $sql = "SELECT * FROM konkursai WHERE status = 0 ORDER BY konk_id DESC LIMIT 5";
                                     $stmt = db_query($sql);
-                                    $olympiads = db_get_results($stmt);
+                                    $olympiads = $stmt ? db_get_results($stmt) : [];
                                     
                                     if (!empty($olympiads)):
                                     ?>
-                                        <ul>
+                                        <ul class="list-group list-group-flush mb-3">
                                             <?php foreach ($olympiads as $olympiad): ?>
-                                                <li>
-                                                    <a href="<?php echo SITE_URL; ?>/modules/olympiads/view.php?id=<?php echo $olympiad['konk_id']; ?>">
-                                                        <?php echo $olympiad['konkurso_pav']; ?>
+                                                <li class="list-group-item px-0">
+                                                    <a href="<?php echo SITE_URL; ?>/modules/olympiads/view.php?id=<?php echo $olympiad['konk_id']; ?>" class="text-decoration-none fw-bold">
+                                                        <?php echo htmlspecialchars($olympiad['konkurso_pav']); ?>
                                                     </a>
                                                 </li>
                                             <?php endforeach; ?>
                                         </ul>
-                                        <a href="<?php echo SITE_URL; ?>/modules/olympiads/index.php" class="btn btn-primary">Visos olimpiados</a>
+                                        <a href="<?php echo SITE_URL; ?>/modules/olympiads/index.php" class="btn btn-outline-primary btn-sm">Visos olimpiados</a>
                                     <?php else: ?>
-                                        <p>Šiuo metu nėra aktyvių olimpiadų.</p>
+                                        <p class="text-muted">Šiuo metu nėra aktyvių olimpiadų.</p>
                                     <?php endif; ?>
                                 </div>
                             </div>
                         </div>
-                        
+
                         <div class="col-md-6">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h3>Greitos nuorodos</h3>
+                            <div class="card h-100 border-info shadow-sm" style="min-height: 550px;">
+                                <div class="card-header bg-info text-white py-2">
+                                    <h3 class="mb-0 text-center" style="font-size: 1rem;">
+                                        <i class="fas fa-calendar-alt"></i> Olimpiadų kalendorius
+                                    </h3>
                                 </div>
-                                <div class="card-body">
-                                    <div class="d-grid gap-2">
-                                        <a href="<?php echo SITE_URL; ?>/modules/registration/index.php" class="btn btn-primary mb-2">Dalyvių registracija</a>
-                                        <a href="<?php echo SITE_URL; ?>/modules/results/index.php" class="btn btn-primary mb-2">Rezultatų peržiūra</a>
-                                        <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" class="btn btn-primary mb-2">Ataskaitos</a>
-                                       <?php if (is_admin()): ?>
-    <!-- Kalendoriaus mygtukas -->
-    <div class="text-center mb-4">
-        <button id="show-iframe" class="btn btn-info btn-lg">
-            <i class="fas fa-calendar-alt"></i> Rodyti olimpiadų kalendorių
-        </button>
-    </div>
-
-   
-<?php endif; ?>
-
-                       
-                    <!-- Mokyklų statistika (įterpta čia) -->
-                    <div class="row mt-5">
+                                <div class="card-body p-0" style="height: 410px; overflow: hidden; position: relative;">
+                                    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%;">
+                                        <iframe 
+                                            src="<?php echo SITE_URL; ?>/modules/reports/kalendorius.php?compact=1" 
+                                            width="100%" 
+                                            height="100%" 
+                                            frameborder="0"
+                                            style="border: 0; display: block;"
+                                            title="Olimpiadų kalendorius"
+                                            loading="lazy">
+                                        </iframe>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    
+                    </div> <div class="row mt-5">
                         <div class="col-12">
-                            <div class="card shadow">
+                            <div class="card shadow-sm">
                                 <div class="card-header bg-success text-white">
-                                    <h3 class="mb-0">Mokyklų statistika</h3>
+                                    <h3 class="h5 mb-0"><i class="fas fa-chart-pie"></i> Mokyklų statistika</h3>
                                 </div>
                                 <div class="card-body">
 
                                     <?php
+                                    $user_school = '';
+                                    if (!is_admin()) {
+                                        $user_stmt = db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's');
+                                        if ($user_stmt) {
+                                            $user = db_get_row($user_stmt);
+                                            $user_school = $user ? ($user['var_mokykla'] ?? '') : '';
+                                        }
+                                    }
+
                                     // === 1. Aktyviausios mokyklos ===
                                     $sql = "SELECT m.pavadinimas AS mokykla, COUNT(d.reg_id) AS cnt 
                                             FROM mokyklos m LEFT JOIN dalyviai d ON m.pavadinimas = d.var_mokykla";
                                     if (!is_admin()) {
-                                        $user_stmt = db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's');
-                                        $user = db_get_row($user_stmt);
-                                        $user_school = $user['var_mokykla'] ?? '';
                                         $sql .= " WHERE m.pavadinimas = ?";
                                     }
                                     $sql .= " GROUP BY m.pavadinimas ORDER BY cnt DESC LIMIT 10";
@@ -103,132 +108,32 @@ require_once dirname(__FILE__) . '/includes/header.php';
                                     $sql = "SELECT m.pavadinimas AS mokykla, 
                                             COUNT(CASE WHEN d.Vieta IN ('I','II','III','laureat.') THEN 1 END) AS cnt 
                                             FROM mokyklos m LEFT JOIN dalyviai d ON m.pavadinimas = d.var_mokykla";
-                                    if (!is_admin()) $sql .= " WHERE m.pavadinimas = ?";
+                                    if (!is_admin()) {
+                                        $sql .= " WHERE m.pavadinimas = ?";
+                                    }
                                     $sql .= " GROUP BY m.pavadinimas ORDER BY cnt DESC LIMIT 10";
                                     $stmt = db_query($sql, !is_admin() ? [$user_school] : [], !is_admin() ? 's' : '');
                                     $prize_schools = $stmt ? db_get_results($stmt) : [];
 
-                                    // === 3. Chart duomenys ===
-                                    $active_labels = $active_data = $active_colors = [];
-                                    $prize_labels = $prize_data = $prize_colors = [];
-                                    $colors = ['#36A2EB', '#FF6384', '#FFCE56', '#4BC0C0', '#9966FF'];
-                                    foreach ($active_schools as $i => $s) {
-                                        $active_labels[] = $s['mokykla'];
-                                        $active_data[] = (int)$s['cnt'];
-                                        $active_colors[] = $colors[$i % count($colors)];
-                                    }
-                                    foreach ($prize_schools as $i => $s) {
-                                        $prize_labels[] = $s['mokykla'];
-                                        $prize_data[] = (int)$s['cnt'];
-                                        $prize_colors[] = $colors[$i % count($colors)];
-                                    }
-
-                                    // === 4. Bendros statistikos ===
-                                    if (is_admin()) {
-                                        $sql = "SELECT COUNT(DISTINCT m.pavadinimas) as s, COUNT(d.reg_id) as p, 
-                                                COUNT(CASE WHEN d.Vieta IN ('I','II','III','laureat.') THEN 1 END) as z 
-                                                FROM mokyklos m LEFT JOIN dalyviai d ON m.pavadinimas = d.var_mokykla";
-                                        $stmt = db_query($sql);
-                                        $r = db_get_row($stmt);
-                                        $total_schools = $r['s'] ?? 0;
-                                        $total_participants = $r['p'] ?? 0;
-                                        $total_prizes = $r['z'] ?? 0;
-                                    } else {
-                                        $sql = "SELECT COUNT(d.reg_id) as p, 
-                                                COUNT(CASE WHEN d.Vieta IN ('I','II','III','laureat.') THEN 1 END) as z 
-                                                FROM dalyviai d WHERE d.var_mokykla = ?";
-                                        $stmt = db_query($sql, [$user_school], 's');
-                                        $r = db_get_row($stmt);
-                                        $total_participants = $r['p'] ?? 0;
-                                        $total_prizes = $r['z'] ?? 0;
-                                        $total_schools = 1;
-                                    }
+                                    // Diagramų duomenys
+                                    $prize_labels = array_column($prize_schools, 'mokykla');
+                                    $prize_data = array_column($prize_schools, 'cnt');
+                                    $prize_colors = array_map(function() { return '#' . substr(md5(rand()), 0, 6); }, $prize_data);
                                     ?>
 
- <!-- IFRAME KORTELĖ (paslėpta iš pradžių) -->
-    <div id="iframe-card" class="card border-info mb-5 shadow-lg" style="display: none;">
-        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-            <h3 class="mb-0">
-                <i class="fas fa-calendar-alt"></i> Olimpiadų kalendorius
-            </h3>
-            <button id="hide-iframe" class="btn-close btn-close-white" aria-label="Uždaryti"></button>
-        </div>
-        <div class="card-body p-0">
-            <iframe 
-                src="<?php echo SITE_URL; ?>/modules/reports/kalendorius.php" 
-                width="100%" 
-                height="650" 
-                frameborder="0"
-                style="border: 0; border-radius: 0 0 0.375rem 0.375rem; display: block;"
-                title="Olimpiadų kalendorius"
-                loading="lazy">
-            </iframe>
-        </div>
-    </div>
-
-    <!-- JavaScript valdymas -->
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const showBtn = document.getElementById('show-iframe');
-            const hideBtn = document.getElementById('hide-iframe');
-            const iframeCard = document.getElementById('iframe-card');
-
-            if (showBtn && iframeCard) {
-                showBtn.addEventListener('click', function () {
-                    iframeCard.style.display = 'block';
-                    showBtn.style.display = 'none';
-                    // Automatiškai slenkame žemyn iki kalendoriaus
-                    iframeCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                });
-            }
-
-            if (hideBtn && iframeCard) {
-                hideBtn.addEventListener('click', function () {
-                    iframeCard.style.display = 'none';
-                    showBtn.style.display = 'block';
-                });
-            }
-        });
-    </script>
-
-
-                                    <!-- Statistikos kortelės -->
-                                    <div class="row text-center mb-4">
-                                        <div class="col-md-4 mb-3">
-                                            <div class="card bg-primary text-white h-100">
-                                                <div class="card-body d-flex flex-column justify-content-center">
-                                                    <h2 class="mb-0"><?php echo $total_schools; ?></h2>
-                                                    <p class="mb-0">Mokyklų</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4 mb-3">
-                                            <div class="card bg-success text-white h-100">
-                                                <div class="card-body d-flex flex-column justify-content-center">
-                                                    <h2 class="mb-0"><?php echo $total_participants; ?></h2>
-                                                    <p class="mb-0">Dalyvių</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-md-4 mb-3">
-                                            <div class="card bg-warning text-white h-100">
-                                                <div class="card-body d-flex flex-column justify-content-center">
-                                                    <h2 class="mb-0"><?php echo $total_prizes; ?></h2>
-                                                    <p class="mb-0">Prizininkų</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Diagramos -->
                                     <div class="row mb-4">
-                                        <div class="col-md-6 mb-4">
-                                            <div class="card h-100">
-                                                <div class="card-header">
-                                                    <h5>Aktyviausios mokyklos</h5>
+                                        <div class="col-md-6 mb-4 mb-md-0">
+                                            <div class="card h-100 shadow-sm border-0 bg-light">
+                                                <div class="card-header border-0 bg-transparent">
+                                                    <h5 class="mb-0 text-center">Aktyviausios mokyklos</h5>
                                                 </div>
                                                 <div class="card-body p-0" style="position: relative; height: 350px;">
-                                                    <?php if (!empty($active_labels)): ?>
+                                                    <?php if (!empty($active_schools) && array_sum(array_column($active_schools, 'cnt')) > 0): ?>
+                                                        <?php
+                                                        $active_labels = array_column($active_schools, 'mokykla');
+                                                        $active_data = array_column($active_schools, 'cnt');
+                                                        $active_colors = array_map(function() { return '#' . substr(md5(rand()), 0, 6); }, $active_data);
+                                                        ?>
                                                         <canvas class="chart-canvas w-100 h-100"
                                                                 data-title="Aktyviausios mokyklos"
                                                                 data-label="Dalyviai"
@@ -237,18 +142,20 @@ require_once dirname(__FILE__) . '/includes/header.php';
                                                                 data-colors='<?php echo json_encode($active_colors); ?>'>
                                                         </canvas>
                                                     <?php else: ?>
-                                                        <p class="text-muted text-center pt-5">Nėra duomenų</p>
+                                                        <div class="d-flex align-items-center justify-content-center h-100">
+                                                            <p class="text-muted mb-0">Nėra pakankamai duomenų</p>
+                                                        </div>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div class="col-md-6 mb-4">
-                                            <div class="card h-100">
-                                                <div class="card-header">
-                                                    <h5>Mokyklos su prizininkais</h5>
+                                        <div class="col-md-6">
+                                            <div class="card h-100 shadow-sm border-0 bg-light">
+                                                <div class="card-header border-0 bg-transparent">
+                                                    <h5 class="mb-0 text-center">Mokyklos su prizininkais</h5>
                                                 </div>
                                                 <div class="card-body p-0" style="position: relative; height: 350px;">
-                                                    <?php if (!empty($prize_labels)): ?>
+                                                    <?php if (!empty($prize_labels) && array_sum($prize_data) > 0): ?>
                                                         <canvas class="chart-canvas w-100 h-100"
                                                                 data-title="Prizininkų lyderiai"
                                                                 data-label="Prizininkai"
@@ -257,57 +164,58 @@ require_once dirname(__FILE__) . '/includes/header.php';
                                                                 data-colors='<?php echo json_encode($prize_colors); ?>'>
                                                         </canvas>
                                                     <?php else: ?>
-                                                        <p class="text-muted text-center pt-5">Nėra duomenų</p>
+                                                        <div class="d-flex align-items-center justify-content-center h-100">
+                                                            <p class="text-muted mb-0">Nėra pakankamai duomenų</p>
+                                                        </div>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
 
-                                    <!-- Lentelės -->
                                     <div class="row">
                                         <div class="col-md-6 mb-4">
-                                            <div class="card">
-                                                <div class="card-header"><h5>Aktyviausios mokyklos</h5></div>
-                                                <div class="card-body">
+                                            <div class="card shadow-sm">
+                                                <div class="card-header bg-light"><h5 class="mb-0">Aktyviausios mokyklos</h5></div>
+                                                <div class="card-body p-0">
                                                     <?php if (!empty($active_schools)): ?>
-                                                        <table class="table table-sm table-striped">
-                                                            <thead><tr><th>#</th><th>Mokykla</th><th>Dalyviai</th></tr></thead>
+                                                        <table class="table table-sm table-striped mb-0">
+                                                            <thead class="table-light"><tr><th class="ps-3">#</th><th>Mokykla</th><th class="pe-3 text-center">Dalyviai</th></tr></thead>
                                                             <tbody>
                                                                 <?php foreach ($active_schools as $i => $s): ?>
                                                                 <tr>
-                                                                    <td><?php echo $i + 1; ?></td>
+                                                                    <td class="ps-3"><?php echo $i + 1; ?></td>
                                                                     <td><?php echo htmlspecialchars($s['mokykla']); ?></td>
-                                                                    <td><span class="badge bg-primary"><?php echo $s['cnt']; ?></span></td>
+                                                                    <td class="pe-3 text-center"><span class="badge bg-primary rounded-pill"><?php echo $s['cnt']; ?></span></td>
                                                                 </tr>
                                                                 <?php endforeach; ?>
                                                             </tbody>
                                                         </table>
                                                     <?php else: ?>
-                                                        <p class="text-muted">Nėra duomenų</p>
+                                                        <p class="text-muted p-3 mb-0">Nėra duomenų</p>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>
                                         </div>
                                         <div class="col-md-6 mb-4">
-                                            <div class="card">
-                                                <div class="card-header"><h5>Prizininkų lyderiai</h5></div>
-                                                <div class="card-body">
+                                            <div class="card shadow-sm">
+                                                <div class="card-header bg-light"><h5 class="mb-0">Prizininkų lyderiai</h5></div>
+                                                <div class="card-body p-0">
                                                     <?php if (!empty($prize_schools)): ?>
-                                                        <table class="table table-sm table-striped">
-                                                            <thead><tr><th>#</th><th>Mokykla</th><th>Prizininkai</th></tr></thead>
+                                                        <table class="table table-sm table-striped mb-0">
+                                                            <thead class="table-light"><tr><th class="ps-3">#</th><th>Mokykla</th><th class="pe-3 text-center">Prizininkai</th></tr></thead>
                                                             <tbody>
                                                                 <?php foreach ($prize_schools as $i => $s): ?>
                                                                 <tr>
-                                                                    <td><?php echo $i + 1; ?></td>
+                                                                    <td class="ps-3"><?php echo $i + 1; ?></td>
                                                                     <td><?php echo htmlspecialchars($s['mokykla']); ?></td>
-                                                                    <td><span class="badge bg-warning text-dark"><?php echo $s['cnt']; ?></span></td>
+                                                                    <td class="pe-3 text-center"><span class="badge bg-warning text-dark rounded-pill"><?php echo $s['cnt']; ?></span></td>
                                                                 </tr>
                                                                 <?php endforeach; ?>
                                                             </tbody>
                                                         </table>
                                                     <?php else: ?>
-                                                        <p class="text-muted">Nėra duomenų</p>
+                                                        <p class="text-muted p-3 mb-0">Nėra duomenų</p>
                                                     <?php endif; ?>
                                                 </div>
                                             </div>
@@ -315,8 +223,8 @@ require_once dirname(__FILE__) . '/includes/header.php';
                                     </div>
 
                                     <?php if (!is_admin()): ?>
-                                    <div class="alert alert-info">
-                                        <strong>Pastaba:</strong> Matote tik savo mokyklos statistiką.
+                                    <div class="alert alert-info mt-2">
+                                        <i class="fas fa-info-circle"></i> <strong>Pastaba:</strong> Šiuo metu matote tik savo mokyklos (<?php echo htmlspecialchars($user_school); ?>) statistiką.
                                     </div>
                                     <?php endif; ?>
 
@@ -324,8 +232,8 @@ require_once dirname(__FILE__) . '/includes/header.php';
                             </div>
                         </div>
                     </div>
-                <?php endif; ?>
-            </div>
+
+                <?php endif; ?> </div>
         </div>
     </div>
 </div>

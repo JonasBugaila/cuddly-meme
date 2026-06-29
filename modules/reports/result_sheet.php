@@ -4,7 +4,20 @@
  * 
  * Šis failas atvaizduoja olimpiadų rezultatų lentelę su balais ir vietomis
  */
-
+// Tikriname, ar buvo paspaustas "Atnaujinti vietas"
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['recalculate_ranks'])) {
+    if (verify_csrf_token($_POST['csrf_token'] ?? '')) {
+        $olympiad_name = sanitize_input($_POST['olympiad_name']);
+        
+        // Iškviečiame jūsų funkciją iš functions.php
+        recalculate_ranks($olympiad_name);
+        
+        set_message('Vietos sėkmingai perskaičiuotos!', 'success');
+        redirect(build_url_with_params(['olympiad_id' => $_GET['olympiad_id']]));
+    } else {
+        set_message('Saugumo klaida: negaliojantis CSRF žetonas.', 'error');
+    }
+}
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
@@ -124,8 +137,27 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <?php if (is_admin()): ?>
                         <div class="mt-3">
                             <button type="submit" name="save_results" class="btn btn-primary">Išsaugoti pakeitimus</button>
+							
+							
+    <button type="submit" name="save_results" class="btn btn-primary">Išsaugoti balus</button>
+
+    <form method="post" onsubmit="return confirm('Ar tikrai norite perskaičiuoti vietas visiems dalyviams šioje olimpiadoje?');">
+        <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+        <input type="hidden" name="olympiad_name" value="<?php echo htmlspecialchars($olympiad_name); ?>">
+        <button type="submit" name="recalculate_ranks" class="btn btn-warning">
+            <i class="fas fa-sync-alt"></i> Atnaujinti vietas
+        </button>
+    </form>
+
+							
+							
+							
+							
+							
                         </div>
+						
                         </form>
+						
                         <?php endif; ?>
                 </div>
             </div>

@@ -369,4 +369,7 @@ function render_pagination($total_items, $limit, $current_page) {
     }
     echo '</div>';
 }
+
+
 ?>
+
