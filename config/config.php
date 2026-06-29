@@ -14,8 +14,8 @@ ini_set('session.use_only_cookies', 1);
 
 // Duomenų bazės prisijungimo duomenys
 define('DB_HOST', 'localhost');
-define('DB_USER', 'testlt_oli');
-define('DB_PASS', 'olimipic=0LI');
+define('DB_USER', '000000000');
+define('DB_PASS', 'o00000000I');
 define('DB_NAME', 'testlt_olimpidos');
 
 // Pagrindinis URL adresas
