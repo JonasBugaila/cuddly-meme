@@ -1,231 +1,141 @@
 <?php
 /**
- * Dalyvių sąrašo atvaizdavimas
- * 
- * Šis failas rodo klasių sąrašą, o pasirinkus klasę – jos mokinius, su filtravimu pagal vardą ir pavardę
+ * Visų dalyvių sąrašas su interaktyviu filtravimu
  */
-
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
-// Tikriname, ar vartotojas prisijungęs ir turi administratoriaus teises
-if (!is_logged_in()) {
-    set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
-    redirect(SITE_URL . '/modules/auth/login.php');
-} elseif (!is_admin()) {
-    set_message('Neturite teisių pasiekti šį puslapį', 'error');
-    redirect(SITE_URL);
+if (!is_logged_in() || !is_admin()) {
+    redirect(SITE_URL . '/index.php');
+    exit;
 }
 
-// Puslapiavimo nustatymai
-$perPage = 20;
-$page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
-$offset = ($page - 1) * $perPage;
+// 1. Filtravimo logikos apdorojimas
+$where_clauses = ["1=1"];
+$params = [];
+$types = "";
 
-// Filtrų ir klasės gavimas
-$selectedClass = isset($_GET['class']) ? sanitize_input($_GET['class']) : '';
-$filterName = isset($_GET['filterName']) ? sanitize_input($_GET['filterName']) : '';
-$filterSurname = isset($_GET['filterSurname']) ? sanitize_input($_GET['filterSurname']) : '';
+// Filtravimo kintamieji
+$f_klase = $_GET['f_klase'] ?? '';
+$f_mokykla = $_GET['f_mokykla'] ?? '';
+$f_olympiad = $_GET['f_olympiad'] ?? '';
+$f_vardas = $_GET['f_vardas'] ?? '';
+$f_pavarde = $_GET['f_pavarde'] ?? '';
 
-// Gauname unikalias klases
-$sqlClasses = "SELECT DISTINCT 1_klase FROM dalyviai ORDER BY 1_klase";
-$stmtClasses = db_query($sqlClasses);
-$classes = db_get_results($stmtClasses);
+if ($f_klase !== '') { $where_clauses[] = "1_klase = ?"; $params[] = $f_klase; $types .= "s"; }
+if ($f_mokykla !== '') { $where_clauses[] = "var_mokykla = ?"; $params[] = $f_mokykla; $types .= "s"; }
+if ($f_olympiad !== '') { $where_clauses[] = "konkurso_pav = ?"; $params[] = $f_olympiad; $types .= "s"; }
+if ($f_vardas !== '') { $where_clauses[] = "1_vardas LIKE ?"; $params[] = "%$f_vardas%"; $types .= "s"; }
+if ($f_pavarde !== '') { $where_clauses[] = "1_pavarde LIKE ?"; $params[] = "%$f_pavarde%"; $types .= "s"; }
 
-// Gauname bendrą filtruotų mokinių skaičių, jei pasirinkta klasė
-$totalParticipants = 0;
-if ($selectedClass) {
-    $sqlCount = "SELECT COUNT(*) as total FROM dalyviai WHERE 1_klase = ?";
-    $paramsCount = [$selectedClass];
-    if (!empty($filterName) || !empty($filterSurname)) {
-        $sqlCount .= " AND 1=1";
-        if (!empty($filterName)) {
-            $sqlCount .= " AND LOWER(1_vardas) LIKE ?";
-            $paramsCount[] = "%" . strtolower($filterName) . "%";
-        }
-        if (!empty($filterSurname)) {
-            $sqlCount .= " AND LOWER(1_pavarde) LIKE ?";
-            $paramsCount[] = "%" . strtolower($filterSurname) . "%";
-        }
-    }
-    $stmtCount = db_query($sqlCount, $paramsCount);
-    $totalParticipants = db_get_row($stmtCount)['total'];
-    $totalPages = ceil($totalParticipants / $perPage);
-} else {
-    $totalPages = 0;
-}
+$where_sql = implode(" AND ", $where_clauses);
 
-// Gauname filtruotus mokinius su ribojimu, jei pasirinkta klasė
-$participants = [];
-if ($selectedClass) {
-    $sql = "SELECT reg_id, konkurso_pav, var_mokykla, 1_vardas, 1_pavarde, 1_klase, 1_mok, 1_mok_kvali, 2_mok, 2_mok_kvali, Balai, Vieta 
-            FROM dalyviai 
-            WHERE 1_klase = ?";
-    $params = [$selectedClass];
-    if (!empty($filterName) || !empty($filterSurname)) {
-        $sql .= " AND 1=1";
-        if (!empty($filterName)) {
-            $sql .= " AND LOWER(1_vardas) LIKE ?";
-            $params[] = "%" . strtolower($filterName) . "%";
-        }
-        if (!empty($filterSurname)) {
-            $sql .= " AND LOWER(1_pavarde) LIKE ?";
-            $params[] = "%" . strtolower($filterSurname) . "%";
-        }
-    }
-    $sql .= " ORDER BY 1_vardas, 1_pavarde LIMIT ? OFFSET ?";
-    $params[] = $perPage;
-    $params[] = $offset;
+// 2. Puslapiavimas ir rikiavimas
+$limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 25;
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($page - 1) * $limit;
 
-    $stmt = db_query($sql, $params, str_repeat('s', count($params) - 2) . 'ii');
-    $participants = db_get_results($stmt);
-}
+$allowed_sort_cols = ['1_vardas', '1_pavarde', '1_klase', 'var_mokykla', 'konkurso_pav', '1_mok', 'reg_id'];
+$sort = isset($_GET['sort']) && in_array($_GET['sort'], $allowed_sort_cols) ? $_GET['sort'] : 'reg_id';
+$dir = isset($_GET['dir']) && strtoupper($_GET['dir']) === 'ASC' ? 'ASC' : 'DESC';
 
-// Grupuojame mokinius pagal klases (jei yra)
-$grouped_participants = [];
-if ($participants) {
-    foreach ($participants as $participant) {
-        $grouped_participants[$participant['1_klase']][] = $participant;
-    }
-}
+// Skaičiuojame įrašus su filtrais
+$count_query = "SELECT COUNT(*) as total FROM dalyviai WHERE $where_sql";
+$total_items = db_get_row(db_query($count_query, $params, $types))['total'] ?? 0;
 
-// Įtraukiame antraštę
+// Gauname duomenis su filtrais
+$sql = "SELECT * FROM dalyviai WHERE $where_sql ORDER BY $sort $dir LIMIT ?, ?";
+$stmt = db_query($sql, array_merge($params, [$offset, $limit]), $types . "ii");
+$participants = db_get_results($stmt);
+
+// 3. Duomenys filtrams (Dropdowns)
+$all_klases = db_get_results(db_query("SELECT DISTINCT 1_klase FROM dalyviai WHERE 1_klase != '' ORDER BY 1_klase ASC"));
+$all_mokyklos = db_get_results(db_query("SELECT DISTINCT var_mokykla FROM dalyviai WHERE var_mokykla != '' ORDER BY var_mokykla ASC"));
+$all_olympiads = db_get_results(db_query("SELECT DISTINCT konkurso_pav FROM dalyviai WHERE konkurso_pav != '' ORDER BY konkurso_pav ASC"));
+
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 ?>
 
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h1>Dalyvių sąrašas</h1>
-                </div>
-                <div class="card-body">
-                    <?php display_message(); ?>
-                    <div class="row mb-3">
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label for="classSelect" class="form-label">Pasirinkite klasę</label>
-                                <select class="form-control" id="classSelect" name="class">
-                                    <option value="">-- Pasirinkite klasę --</option>
-                                    <?php foreach ($classes as $class): ?>
-                                        <option value="<?php echo htmlspecialchars($class['1_klase']); ?>" 
-                                                <?php echo ($selectedClass === $class['1_klase']) ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($class['1_klase']); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label for="filterName" class="form-label">Filtruoti pagal vardą</label>
-                                <input type="text" class="form-control" id="filterName" name="filterName" value="<?php echo htmlspecialchars($filterName); ?>" placeholder="Įveskite vardą...">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label for="filterSurname" class="form-label">Filtruoti pagal pavardę</label>
-                                <input type="text" class="form-control" id="filterSurname" name="filterSurname" value="<?php echo htmlspecialchars($filterSurname); ?>" placeholder="Įveskite pavardę...">
-                            </div>
-                        </div>
-                    </div>
-                    <form method="get" id="filterForm" style="display: none;">
-                        <input type="text" name="class" value="<?php echo htmlspecialchars($selectedClass); ?>">
-                        <input type="text" name="filterName" value="<?php echo htmlspecialchars($filterName); ?>">
-                        <input type="text" name="filterSurname" value="<?php echo htmlspecialchars($filterSurname); ?>">
-                        <input type="text" name="page" value="<?php echo $page; ?>">
-                    </form>
-                    <?php if ($selectedClass && $grouped_participants): ?>
-                        <?php foreach ($grouped_participants as $klase => $participants_group): ?>
-                            <h3 class="mt-4"><?php echo htmlspecialchars($klase); ?></h3>
-                            <table class="table table-striped participant-table" data-klase="<?php echo htmlspecialchars($klase); ?>">
-                                <thead>
-                                    <tr>
-                                        <th>Vardas</th>
-                                        <th>Pavardė</th>
-                                        <th>Konkurso pavadinimas</th>
-                                        <th>Mokykla</th>
-                                        <th>Pirmo mokytojo vardas, pavardė</th>
-                                        <th>Pirmo mokytojo kvalifikacija</th>
-                                        <th>Antro mokytojo vardas, pavardė</th>
-                                        <th>Antro mokytojo kvalifikacija</th>
-                                        <th>Balai</th>
-                                        <th>Vieta</th>
-                                        <th>Veiksmai</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="participant-rows">
-                                    <?php foreach ($participants_group as $participant): ?>
-                                        <tr data-vardas="<?php echo strtolower(htmlspecialchars($participant['1_vardas'])); ?>" data-pavarde="<?php echo strtolower(htmlspecialchars($participant['1_pavarde'])); ?>">
-                                            <td><?php echo htmlspecialchars($participant['1_vardas']); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['1_pavarde']); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['konkurso_pav']); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['var_mokykla']); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['1_mok'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['1_mok_kvali'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['2_mok'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['2_mok_kvali'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['Balai'] ?? ''); ?></td>
-                                            <td><?php echo htmlspecialchars($participant['Vieta'] ?? ''); ?></td>
-                                            <td>
-                                                <a href="participant_edit.php?id=<?php echo htmlspecialchars($participant['reg_id']); ?>" class="btn btn-primary btn-sm">Redaguoti</a>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
-                        <?php endforeach; ?>
-                        <!-- Puslapių navigacija -->
-                        <?php if ($totalPages > 1): ?>
-                            <nav aria-label="Puslapių navigacija">
-                                <ul class="pagination justify-content-center mt-3">
-                                    <li class="page-item <?php echo ($page <= 1) ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $page - 1; ?>&class=<?php echo urlencode($selectedClass); ?>&filterName=<?php echo urlencode($filterName); ?>&filterSurname=<?php echo urlencode($filterSurname); ?>" tabindex="-1">Ankstesnis</a>
-                                    </li>
-                                    <?php for ($i = 1; $i <= $totalPages; $i++): ?>
-                                        <li class="page-item <?php echo ($page === $i) ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?page=<?php echo $i; ?>&class=<?php echo urlencode($selectedClass); ?>&filterName=<?php echo urlencode($filterName); ?>&filterSurname=<?php echo urlencode($filterSurname); ?>"><?php echo $i; ?></a>
-                                        </li>
-                                    <?php endfor; ?>
-                                    <li class="page-item <?php echo ($page >= $totalPages) ? 'disabled' : ''; ?>">
-                                        <a class="page-link" href="?page=<?php echo $page + 1; ?>&class=<?php echo urlencode($selectedClass); ?>&filterName=<?php echo urlencode($filterName); ?>&filterSurname=<?php echo urlencode($filterSurname); ?>">Kitas</a>
-                                    </li>
-                                </ul>
-                            </nav>
-                        <?php endif; ?>
-                    <?php elseif ($selectedClass): ?>
-                        <p class="text-warning">Nėra mokinių šioje klasėje pagal nurodytus filtrus.</p>
-                    <?php endif; ?>
-                    <a href="<?php echo SITE_URL; ?>/modules/admin/" class="btn btn-secondary mt-3">Grįžti</a>
-                </div>
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-light border-0 py-3">
+        <h5 class="mb-0"><i class="fas fa-filter text-primary"></i> Filtruoti dalyvius</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-2">
+                <input type="text" name="f_vardas" class="form-control" placeholder="Vardas" value="<?php echo htmlspecialchars($f_vardas); ?>">
             </div>
-        </div>
+            <div class="col-md-2">
+                <input type="text" name="f_pavarde" class="form-control" placeholder="Pavardė" value="<?php echo htmlspecialchars($f_pavarde); ?>">
+            </div>
+            <div class="col-md-2">
+                <select name="f_klase" class="form-select">
+                    <option value="">Klasė (visos)</option>
+                    <?php foreach($all_klases as $r): ?><option value="<?php echo $r['1_klase']; ?>" <?php echo $f_klase == $r['1_klase'] ? 'selected' : ''; ?>><?php echo $r['1_klase']; ?></option><?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="f_mokykla" class="form-select">
+                    <option value="">Mokykla (visos)</option>
+                    <?php foreach($all_mokyklos as $r): ?><option value="<?php echo $r['var_mokykla']; ?>" <?php echo $f_mokykla == $r['var_mokykla'] ? 'selected' : ''; ?>><?php echo $r['var_mokykla']; ?></option><?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="f_olympiad" class="form-select">
+                    <option value="">Olimpiada (visos)</option>
+                    <?php foreach($all_olympiads as $r): ?><option value="<?php echo $r['konkurso_pav']; ?>" <?php echo $f_olympiad == $r['konkurso_pav'] ? 'selected' : ''; ?>><?php echo $r['konkurso_pav']; ?></option><?php endforeach; ?>
+                </select>
+            </div>
+            <div class="col-12 text-end">
+                <a href="participants_list.php" class="btn btn-secondary me-2">Išvalyti</a>
+                <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Filtruoti</button>
+            </div>
+        </form>
     </div>
 </div>
 
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const classSelect = document.getElementById('classSelect');
-    const filterName = document.getElementById('filterName');
-    const filterSurname = document.getElementById('filterSurname');
-    const filterForm = document.getElementById('filterForm');
+<div class="card shadow-lg border-0 mb-4 rounded-3 overflow-hidden">
+    <div class="table-responsive">
+        <table class="table table-striped table-hover align-middle mb-0" style="min-width: 1050px;">
+            <thead class="table-dark">
+                <tr>
+                    <th class="ps-4">Vardas</th>
+                    <th>Pavardė</th>
+                    <th class="text-center">Klasė</th>
+                    <th>Mokykla</th>
+                    <th>Olimpiada</th>
+                    <th>Mokytojas</th>
+                    <th class="text-end pe-4">Veiksmai</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (!empty($participants)): foreach ($participants as $p): ?>
+                <tr>
+                    <td class="ps-4"><?php echo htmlspecialchars($p['1_vardas'] ?? ''); ?></td>
+                    <td class="fw-bold"><?php echo htmlspecialchars($p['1_pavarde'] ?? ''); ?></td>
+                    <td class="text-center"><span class="badge bg-light text-dark"><?php echo htmlspecialchars($p['1_klase'] ?? ''); ?></span></td>
+                    <td class="text-truncate" style="max-width: 220px;" title="<?php echo htmlspecialchars($p['var_mokykla'] ?? ''); ?>"><?php echo htmlspecialchars($p['var_mokykla'] ?? ''); ?></td>
+                    <td class="text-truncate" style="max-width: 220px;" title="<?php echo htmlspecialchars($p['konkurso_pav'] ?? ''); ?>"><span class="badge bg-primary bg-opacity-10 text-primary"><?php echo htmlspecialchars($p['konkurso_pav'] ?? ''); ?></span></td>
+                    <td><?php echo htmlspecialchars($p['1_mok'] ?? ''); ?></td>
+                    <td class="text-end pe-4">
+                        <a href="<?php echo SITE_URL; ?>/modules/admin/participant_edit.php?id=<?php echo $p['reg_id']; ?>" class="btn btn-sm btn-primary">Redaguoti</a>
+                    </td>
+                </tr>
+                <?php endforeach; else: ?>
+                    <tr><td colspan="7" class="text-center py-5 text-muted">Nėra įrašų pagal pasirinktus kriterijus.</td></tr>
+                <?php endif; ?>
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="p-3 border-top bg-light text-center">
+        <?php 
+            // SVARBU: Kad puslapiavimas veiktų su filtrais, turite įsitikinti, kad render_pagination 
+            // įtraukia $_GET parametrus. Jei jūsų funkcija tai daro automatiškai - viskas gerai.
+            render_pagination($total_items, $limit, $page); 
+        ?>
+    </div>
+</div>
 
-    function submitFilter() {
-        filterForm.querySelector('input[name="class"]').value = classSelect.value;
-        filterForm.querySelector('input[name="filterName"]').value = filterName.value;
-        filterForm.querySelector('input[name="filterSurname"]').value = filterSurname.value;
-        filterForm.querySelector('input[name="page"]').value = 1; // Grįžti į pirmą puslapį
-        filterForm.submit();
-    }
-
-    classSelect.addEventListener('change', submitFilter);
-    filterName.addEventListener('input', submitFilter);
-    filterSurname.addEventListener('input', submitFilter);
-});
-</script>
-
-<?php
-require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php';
-?>
+<?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>

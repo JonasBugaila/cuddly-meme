@@ -114,40 +114,35 @@ function has_all_keys($array, $keys) {
 }
 
 function generate_printable_table($title, $institution, $headers, $data, $options = []) {
-    $default_options = [
-        'date_format' => 'Y-m-d',
-        'signature_text' => 'Parašas',
-        'signature_name' => '',
-        'page_text' => 'Puslapis',
-        'print_button_text' => 'Spausdinti',
-        'back_button_text' => 'Grįžti',
-        'table_class' => 'table table-bordered',
-        'include_print_button' => true,
-        'include_back_button' => true
-    ];
-    $options = array_merge($default_options, $options);
-    $print_id = 'print_' . uniqid();
-    $html = '<div id="' . $print_id . '_container">';
-    if ($options['include_print_button'] || $options['include_back_button']) {
-        $html .= '<div class="d-print-none mb-3">';
-        if ($options['include_print_button']) {
-            $html .= '<button onclick="window.print();" class="btn btn-primary me-2">' . $options['print_button_text'] . '</button>';
-        }
-        if ($options['include_back_button']) {
-            $html .= '<button onclick="window.history.back();" class="btn btn-secondary">' . $options['back_button_text'] . '</button>';
-        }
-        $html .= '</div>';
+    // Naudojame dirname atsižvelgiant į tai, kad functions.php yra config aplanke
+    $layout_file = dirname(dirname(__FILE__)) . '/config/print_layout.json';
+    if (file_exists($layout_file)) {
+        $layout = json_decode(file_get_contents($layout_file), true);
+    } else {
+        $layout = ['header_html' => '<h3>{{INSTITUTION}}</h3><h4>{{TITLE}}</h4>', 'footer_html' => '', 'margin_t'=>20, 'margin_b'=>20, 'margin_l'=>20, 'margin_r'=>20, 'font_size'=>12];
     }
-    $html .= '<div id="' . $print_id . '_printable" style="counter-reset: page 0;">';
-    $html .= '<div class="text-center mb-4">';
-    $html .= '<h3>' . htmlspecialchars($institution) . '</h3>';
-    $html .= '<h4>' . htmlspecialchars($title) . '</h4>';
-    $html .= '<p>Spausdinimo data: ' . date($options['date_format']) . '</p>';
+    
+    $search = ['{{TITLE}}', '{{INSTITUTION}}', '{{DATE}}'];
+    $replace = [htmlspecialchars($title), htmlspecialchars($institution), date('Y-m-d')];
+    
+    $header_html = str_replace($search, $replace, $layout['header_html'] ?? '');
+    $footer_html = str_replace($search, $replace, $layout['footer_html'] ?? '');
+    
+    $print_id = 'print_' . uniqid();
+    $html = '<div id="' . $print_id . '_container" class="bg-white p-4 shadow-sm rounded mb-4">';
+    
+    $html .= '<div class="d-print-none mb-4 pb-3 border-bottom d-flex justify-content-between">';
+    $html .= '<div><button onclick="window.print();" class="btn btn-primary btn-lg me-2"><i class="fas fa-print"></i> Spausdinti ataskaitą</button>';
+    $html .= '<button onclick="window.history.back();" class="btn btn-secondary btn-lg"><i class="fas fa-arrow-left"></i> Grįžti atgal</button></div>';
     $html .= '</div>';
-    $html .= '<table class="' . $options['table_class'] . '">';
-    $html .= '<thead><tr>';
-    foreach ($headers as $header) {
-        $html .= '<th>' . htmlspecialchars($header) . '</th>';
+    
+    $html .= '<div id="' . $print_id . '_printable" class="print-wrapper" style="counter-reset: page 0;">';
+    $html .= '<div class="print-header">' . $header_html . '</div>';
+    
+    $html .= '<table class="table print-table w-100">';
+    $html .= '<thead class="table-light"><tr>';
+    foreach ($headers as $header_text) {
+        $html .= '<th>' . htmlspecialchars($header_text) . '</th>';
     }
     $html .= '</tr></thead><tbody>';
     foreach ($data as $row) {
@@ -158,33 +153,29 @@ function generate_printable_table($title, $institution, $headers, $data, $option
         $html .= '</tr>';
     }
     $html .= '</tbody></table>';
-    $html .= '<div class="mt-5"><div class="row"><div class="col-6">';
-    $html .= '<p>' . $options['signature_text'] . ' ___________________</p>';
-    if (!empty($options['signature_name'])) {
-        $html .= '<p>' . htmlspecialchars($options['signature_name']) . '</p>';
-    }
-    $html .= '</div></div></div></div></div>';
+    
+    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html . '</div>';
+    $html .= '</div></div>';
+    
     $html .= '<style>
+        table.print-table { border-collapse: collapse; margin-bottom: 20px; }
+        table.print-table th, table.print-table td { border: 1px solid #222; padding: 6px 8px; }
+        
         @media print {
-            body { padding: 20mm; }
+            body { 
+                background: #fff !important; 
+                padding: 0 !important;
+                font-family: "Times New Roman", Times, serif;
+                font-size: ' . (int)($layout['font_size'] ?? 12) . 'pt !important; 
+            }
+            @page { 
+                margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)$layout['margin_r'] . 'mm ' . (int)$layout['margin_b'] . 'mm ' . (int)$layout['margin_l'] . 'mm; 
+            }
             .d-print-none { display: none !important; }
-            .page-number:before { content: counter(page); }
-            @page { size: A4; margin: 20mm; counter-increment: page; }
-            table { width: 100%; border-collapse: collapse; }
-            table th, table td { border: 1px solid #000; padding: 8px; }
-            table th { background-color: #f2f2f2; }
+            .bg-white { box-shadow: none !important; padding: 0 !important; }
         }
     </style>';
-    $html .= '<script>
-        document.addEventListener("DOMContentLoaded", function() {
-            var pageNumberSpans = document.getElementsByClassName("page-number");
-            for (var i = 0; i < pageNumberSpans.length; i++) {
-                if (!pageNumberSpans[i].innerText || pageNumberSpans[i].innerText === "0") {
-                    pageNumberSpans[i].innerText = "1";
-                }
-            }
-        });
-    </script>';
+    
     return $html;
 }
 
@@ -369,7 +360,24 @@ function render_pagination($total_items, $limit, $current_page) {
     }
     echo '</div>';
 }
-
+/**
+ * Gauna spausdinimo maketo nustatymus (Atsargiai sukuria numatytuosius, jei failo nėra)
+ */
+function get_print_layout() {
+    $file = dirname(dirname(dirname(__FILE__))) .'/config/print_layout.json';
+    if (file_exists($file)) {
+        return json_decode(file_get_contents($file), true);
+    }
+    return [
+        'header_html' => '<div style="text-align: center; margin-bottom: 20px;"><h3 style="margin-bottom: 5px;">{{INSTITUTION}}</h3><h4 style="color: #444;">{{TITLE}}</h4></div>',
+        'footer_html' => '<div style="margin-top: 50px; display: flex; justify-content: space-between;"><p><strong>Komisijos pirmininkas:</strong> ___________________</p><p><strong>Data:</strong> ' . date('Y-m-d') . '</p></div>',
+        'margin_t' => 20,
+        'margin_b' => 20,
+        'margin_l' => 20,
+        'margin_r' => 20,
+        'font_size' => 12
+    ];
+}
 
 ?>
 

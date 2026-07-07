@@ -105,6 +105,29 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                         </div>
                     </div>
+					<div class="row">
+					<div class="col-md-4">
+                        <div class="card admin-card mb-4">
+                            <div class="card-header">
+                                <h3>Diplomų šablonai</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>Diplomų šablono redagavimas.</p>
+                                <a href="<?php echo SITE_URL; ?>/modules/admin/diploma_template.php" class="btn btn-primary">Diplomų šablonai</a>
+                            </div>
+                        </div>
+						</div>
+						<div class="col-md-4">
+						 <div class="card admin-card mb-4">
+                            <div class="card-header">
+                                <h3>Ataskaitų šablonai</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>Ataskaitų šablono redagavimas.</p>
+                                <a href="<?php echo SITE_URL; ?>/modules/admin/print_template.php" class="btn btn-primary">Ataskaitų šablonai</a>
+                            </div>
+                        </div>
+					</div>	
                 </div>
             </div>
         </div>

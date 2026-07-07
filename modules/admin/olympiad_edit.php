@@ -184,7 +184,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <div class="col-md-6">
                                     <div class="form-group mb-3">
                                         <label for="vieta" class="form-label">Vieta</label>
-                                        <input type="text" class="form-control" id="vieta" name="vieta" value="<?php echo htmlspecialchars($olympiad['vieta']); ?>">
+                                        <input type="text" class="form-control" id="vieta" name="vieta" value="<?php echo htmlspecialchars($olympiad['vieta'] ?? ''); ?>">
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -223,7 +223,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <div class="col-12">
                                     <div class="form-group mb-3">
                                         <label for="aprasymas" class="form-label">Aprašymas</label>
-                                        <textarea class="form-control" id="aprasymas" name="aprasymas" rows="5"><?php echo htmlspecialchars($olympiad['aprasymas']); ?></textarea>
+                                        <textarea class="form-control" id="aprasymas" name="aprasymas" rows="5"><?php echo htmlspecialchars($olympiad['aprasymas'] ?? ''); ?></textarea>
                                     </div>
                                 </div>
                             </div>

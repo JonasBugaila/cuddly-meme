@@ -1,214 +1,160 @@
 <?php
 /**
- * Mokyklų statistikos puslapis
- * 
- * Šis failas atvaizduoja mokyklų statistikas pagal olimpiadas
- * (dalyviai, vidutiniai balai, prizininkai)
+ * Statistikos modulis: Mokyklų apžvalga, statistika ir ataskaitų spausdinimas
  */
-
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
-// Tikriname ar vartotojas prisijungęs
 if (!is_logged_in()) {
-    set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
     redirect(SITE_URL . '/modules/auth/login.php');
-}
-
-// Gauname filtrus
-$selected_olympiad = isset($_GET['olympiad']) ? sanitize_input($_GET['olympiad']) : '';
-$print_mode = isset($_GET['print']) && $_GET['print'] == '1';
-
-// Gauname olimpiadų sąrašą
-$sql = "SELECT DISTINCT konkurso_pav FROM konkursai ORDER BY konkurso_pav ASC";
-$stmt = db_query($sql);
-$olympiads = db_get_results($stmt);
-
-// Gauname statistikas
-$stats = [];
-if (!empty($selected_olympiad) || is_admin()) {
-    $sql = "
-        SELECT 
-            m.pavadinimas AS mokykla,
-            COALESCE(k.konkurso_pav, 'Visos olimpiados') AS olimpiada,
-            COUNT(d.reg_id) AS dalyviu_skaicius,
-            ROUND(AVG(CAST(COALESCE(d.Balai, '0') AS INTEGER)), 2) AS vidutiniai_balai,
-            COUNT(CASE WHEN d.Vieta IN ('I', 'II', 'III', 'laureat.') THEN 1 END) AS prizininku_skaicius
-        FROM mokyklos m
-        LEFT JOIN dalyviai d ON m.pavadinimas = d.var_mokykla
-        LEFT JOIN konkursai k ON d.konkurso_pav = k.konkurso_pav
-    ";
-    $params = [];
-    $param_types = '';
-
-    if (!is_admin()) {
-        // Paprastas vartotojas mato tik savo mokyklą
-        if (!isset($_SESSION['user_id'])) {
-            set_message('Jūsų sesijos duomenys neteisingi. Prašome prisijungti iš naujo.', 'error');
-            redirect(SITE_URL . '/modules/auth/login.php');
-        }
-        $user_sql = "SELECT var_mokykla FROM vartotojas WHERE vart_id = ?";
-        $user_stmt = db_query($user_sql, [$_SESSION['user_id']], 's');
-        $user_data = db_get_row($user_stmt);
-        
-        if (!$user_data || empty($user_data['var_mokykla'])) {
-            set_message('Jūsų mokykla nenurodyta. Susisiekite su administratoriumi.', 'error');
-            redirect(SITE_URL . '/modules/reports/index.php');
-        }
-        
-        $sql .= " WHERE m.pavadinimas = ?";
-        $params[] = $user_data['var_mokykla'];
-        $param_types = 's';
-    } elseif (!empty($selected_olympiad)) {
-        $sql .= " WHERE k.konkurso_pav = ?";
-        $params[] = $selected_olympiad;
-        $param_types = 's';
-    }
-
-    $sql .= " GROUP BY m.pavadinimas, k.konkurso_pav HAVING dalyviu_skaicius > 0 ORDER BY m.pavadinimas, k.konkurso_pav";
-    $stmt = db_query($sql, $params, $param_types);
-    $stats = db_get_results($stmt);
-}
-
-// Bendros statistikos
-$total_stats = [];
-if (is_admin() || empty($selected_olympiad)) {
-    $total_sql = "
-        SELECT 
-            COUNT(DISTINCT m.pavadinimas) AS mokyklu_skaicius,
-            COUNT(d.reg_id) AS bendras_dalyviu_skaicius,
-            ROUND(AVG(CAST(COALESCE(d.Balai, '0') AS INTEGER)), 2) AS bendri_vidutiniai_balai
-        FROM mokyklos m
-        LEFT JOIN dalyviai d ON m.pavadinimas = d.var_mokykla
-    ";
-    if (!is_admin()) {
-        $user_sql = "SELECT var_mokykla FROM vartotojas WHERE vart_id = ?";
-        $user_stmt = db_query($user_sql, [$_SESSION['user_id']], 's');
-        $user_data = db_get_row($user_stmt);
-        if ($user_data && !empty($user_data['var_mokykla'])) {
-            $total_sql .= " WHERE m.pavadinimas = ?";
-            $total_params = [$user_data['var_mokykla']];
-            $total_stmt = db_query($total_sql, $total_params, 's');
-        } else {
-            $total_stats = [['mokyklu_skaicius' => 0, 'bendras_dalyviu_skaicius' => 0, 'bendri_vidutiniai_balai' => 0]];
-        }
-    } else {
-        $total_stmt = db_query($total_sql);
-    }
-    $total_stats = db_get_results($total_stmt) ?: [['mokyklu_skaicius' => 0, 'bendras_dalyviu_skaicius' => 0, 'bendri_vidutiniai_balai' => 0]];
-    $total_stats = $total_stats[0];
-}
-
-// Jei spausdinimo režimas
-if ($print_mode && !empty($stats)) {
-    header('Content-Type: text/html; charset=UTF-8');
-    $headers = ['Mokykla', 'Olimpiada', 'Dalyvių skaičius', 'Vidutiniai balai', 'Prizininkų skaičius'];
-    $data = [];
-    foreach ($stats as $stat) {
-        $data[] = [
-            $stat['mokykla'],
-            $stat['olimpiada'],
-            $stat['dalyviu_skaicius'],
-            $stat['vidutiniai_balai'],
-            $stat['prizininku_skaicius']
-        ];
-    }
-    echo generate_printable_table('Mokyklų statistika', 'Švietimo pagalbos tarnyba', $headers, $data, [
-        'signature_text' => 'Atsakingo asmens parašas',
-        'include_back_button' => true
-    ]);
     exit;
 }
 
-// Įtraukiame antraštę
+// Puslapiavimo nustatymai
+$limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 25;
+$page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($page - 1) * $limit;
+$sort = isset($_GET['sort']) ? sanitize_input($_GET['sort']) : 'pavadinimas';
+$dir = isset($_GET['dir']) && strtoupper($_GET['dir']) === 'DESC' ? 'DESC' : 'ASC';
+
+// Bendras mokyklų skaičius puslapiavimui
+$count_result = db_get_row(db_query("SELECT COUNT(*) as total FROM mokyklos"));
+$total_items = $count_result['total'] ?? 0;
+
+// Mokyklų sąrašas
+$sql = "SELECT * FROM mokyklos ORDER BY $sort $dir LIMIT ?, ?";
+$stmt = db_query($sql, [$offset, $limit], 'ii');
+$results = db_get_results($stmt);
+
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 ?>
 
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h1>Mokyklų statistika</h1>
-                <div>
-                    <?php if (!empty($stats)): ?>
-                        <a href="<?php echo SITE_URL; ?>/modules/reports/school_stats.php?olympiad=<?php echo urlencode($selected_olympiad); ?>&print=1" target="_blank" class="btn btn-primary">Spausdinti</a>
+<div class="card shadow-sm border-0">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+        <h1 class="h4 mb-0"><i class="fas fa-chart-bar"></i> Mokyklų statistika</h1>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive" style="min-height: 400px;">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="ps-3"><?php echo generate_sortable_header('pavadinimas', 'Mokykla', $sort, $dir); ?></th>
+                        <th><?php echo generate_sortable_header('miestas', 'Miestas', $sort, $dir); ?></th>
+                        <th class="text-end pe-3">Dalyvių skaičius</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (!empty($results)): foreach ($results as $row): 
+                        $mok = $row['pavadinimas'];
+                        $stats = db_get_row(db_query("
+                            SELECT 
+                                COUNT(*) as total_dalyviai,
+                                COUNT(DISTINCT konkurso_pav) as total_olimpiados,
+                                COUNT(DISTINCT 1_klase) as total_klases,
+                                SUM(CASE WHEN Vieta IN ('I', 'II', 'III') THEN 1 ELSE 0 END) as total_prizininkai
+                            FROM dalyviai WHERE var_mokykla = ?", [$mok], 's'));
+                        
+                        $unique_id = 'stats_' . md5($mok);
+                    ?>
+                    <tr class="cursor-pointer" data-bs-toggle="collapse" data-bs-target="#<?php echo $unique_id; ?>">
+                        <td class="ps-3 fw-bold"><i class="fas fa-chevron-down text-muted me-2"></i> <?php echo htmlspecialchars($mok); ?></td>
+                        <td><?php echo htmlspecialchars($row['miestas'] ?? '-'); ?></td>
+                        <td class="text-end pe-3">
+                            <span class="badge bg-info text-dark fs-6"><?php echo $stats['total_dalyviai'] ?? 0; ?></span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="3" class="p-0 border-0">
+                            <div class="collapse" id="<?php echo $unique_id; ?>">
+                                <div class="card card-body bg-light border-0 rounded-0 p-4" id="print_area_<?php echo $unique_id; ?>">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h5 class="mb-0 text-primary fw-bold"><?php echo htmlspecialchars($mok); ?> – Išsami ataskaita</h5>
+                                        <button onclick="printReport('print_area_<?php echo $unique_id; ?>')" class="btn btn-sm btn-outline-primary d-print-none">
+                                            <i class="fas fa-print"></i> Spausdinti ataskaitą
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="row text-center g-3">
+                                        <div class="col-md-3">
+                                            <div class="p-3 bg-white shadow-sm rounded border">
+                                                <h6 class="text-muted text-uppercase small">Olimpiados</h6>
+                                                <h4 class="text-primary mb-0"><?php echo $stats['total_olimpiados'] ?? 0; ?></h4>
+                                                <small class="text-muted d-block mt-1">Dalyvauta konkursuose</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="p-3 bg-white shadow-sm rounded border">
+                                                <h6 class="text-muted text-uppercase small">Dalyviai</h6>
+                                                <h4 class="text-info mb-0"><?php echo $stats['total_dalyviai'] ?? 0; ?></h4>
+                                                <small class="text-muted d-block mt-1">Registruotų moksleivių</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="p-3 bg-white shadow-sm rounded border">
+                                                <h6 class="text-muted text-uppercase small">Prizininkai</h6>
+                                                <h4 class="text-success mb-0"><?php echo $stats['total_prizininkai'] ?? 0; ?></h4>
+                                                <small class="text-muted d-block mt-1">I–III vietų laimėtojai</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="p-3 bg-white shadow-sm rounded border">
+                                                <h6 class="text-muted text-uppercase small">Klasės</h6>
+                                                <h4 class="text-warning mb-0"><?php echo $stats['total_klases'] ?? 0; ?></h4>
+                                                <small class="text-muted d-block mt-1">Skirtingų klasių grupės</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    <?php endforeach; else: ?>
+                        <tr><td colspan="3" class="text-center text-muted py-5">Duomenų nerasta.</td></tr>
                     <?php endif; ?>
-                    <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" class="btn btn-secondary">Grįžti į ataskaitas</a>
-                </div>
-            </div>
-            <div class="card-body">
-                <!-- Filtrai -->
-                <form action="<?php echo SITE_URL; ?>/modules/reports/school_stats.php" method="get" class="mb-4">
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="form-group mb-3">
-                                <label for="olympiad" class="form-label">Olimpiada (tik administratoriams)</label>
-                                <select class="form-control" id="olympiad" name="olympiad">
-                                    <option value="">Visos olimpiados</option>
-                                    <?php foreach ($olympiads as $o): ?>
-                                        <option value="<?php echo htmlspecialchars($o['konkurso_pav']); ?>" <?php echo $selected_olympiad == $o['konkurso_pav'] ? 'selected' : ''; ?>>
-                                            <?php echo htmlspecialchars($o['konkurso_pav']); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="form-group mb-3">
-                                <label class="form-label">&nbsp;</label>
-                                <button type="submit" class="btn btn-primary d-block">Filtruoti</button>
-                            </div>
-                        </div>
-                    </div>
-                </form>
-
-                <!-- Bendros statistikos -->
-                <?php if (!empty($total_stats['mokyklu_skaicius']) || is_admin()): ?>
-                    <div class="alert alert-info mb-4">
-                        <h5>Bendros statistikos</h5>
-                        <p><strong>Mokyklų skaičius:</strong> <?php echo $total_stats['mokyklu_skaicius']; ?></p>
-                        <p><strong>Bendras dalyvių skaičius:</strong> <?php echo $total_stats['bendras_dalyviu_skaicius']; ?></p>
-                        <p><strong>Bendri vidutiniai balai:</strong> <?php echo $total_stats['bendri_vidutiniai_balai']; ?></p>
-                    </div>
-                <?php endif; ?>
-
-                <!-- Statistikos lentelė -->
-                <?php if (!empty($stats)): ?>
-                    <div class="table-responsive">
-                        <table class="table table-striped table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Mokykla</th>
-                                    <th>Olimpiada</th>
-                                    <th>Dalyvių skaičius</th>
-                                    <th>Vidutiniai balai</th>
-                                    <th>Prizininkų skaičius</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($stats as $stat): ?>
-                                    <tr>
-                                        <td><?php echo htmlspecialchars($stat['mokykla']); ?></td>
-                                        <td><?php echo htmlspecialchars($stat['olimpiada']); ?></td>
-                                        <td><?php echo $stat['dalyviu_skaicius']; ?></td>
-                                        <td><?php echo $stat['vidutiniai_balai']; ?></td>
-                                        <td><?php echo $stat['prizininku_skaicius']; ?></td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php else: ?>
-                    <div class="alert alert-info">
-                        <p>Nėra statistikos duomenų pagal pasirinktus filtrus.</p>
-                    </div>
-                <?php endif; ?>
-            </div>
+                </tbody>
+            </table>
+        </div>
+        <div class="p-3 border-top">
+            <?php render_pagination($total_items, $limit, $page); ?>
         </div>
     </div>
 </div>
 
-<?php
-require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php';
-?>
+<script>
+function printReport(divId) {
+    // 1. Paimame turinį, kurį norime spausdinti
+    var content = document.getElementById(divId).innerHTML;
+    
+    // 2. Atidarome naują, tuščią langą
+    var win = window.open('', '_blank', 'height=600,width=800');
+    
+    // 3. Suformuojame visą HTML dokumentą naujame lange
+    win.document.write('<html><head><title>Mokyklos ataskaita</title>');
+    // Įkeliame Bootstrap stilius, kad ataskaita išliktų graži
+    win.document.write('<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">');
+    // Pridedame stilių, kad spaudinys būtų švarus
+    win.document.write('<style>body { padding: 20px; background: white; } .d-print-none { display: none !important; }</style>');
+    win.document.write('</head><body>');
+    win.document.write(content); // Įrašome tik kortelės turinį
+    win.document.write('</body></html>');
+    
+    // 4. Uždarome dokumento srautą ir spausdiname
+    win.document.close(); 
+    win.focus();
+    
+    // Trumpas uždelsimas, kad stiliai spėtų užsikrauti
+    setTimeout(function() {
+        win.print();
+        win.close(); // Uždaro langą po spausdinimo
+    }, 250);
+}
+</script>
+
+<style>
+    .cursor-pointer { cursor: pointer; }
+    .cursor-pointer:hover { background-color: #f8f9fa; }
+    @media print { .d-print-none { display: none !important; } }
+</style>
+
+<?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>

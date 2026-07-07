@@ -354,12 +354,12 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             
                             <div class="form-group">
                                 <button type="submit" class="btn btn-primary">Išsaugoti pakeitimus</button>
-                                <a href="<?php echo SITE_URL; ?>/modules/admin/participants.php" class="btn btn-secondary ms-2">Grįžti</a>
+                                <a href="<?php echo SITE_URL; ?>/modules/admin/participants_list.php" class="btn btn-secondary ms-2">Grįžti</a>
                             </div>
                         </form>
                     <?php else: ?>
                         <p class="text-warning">Dalyvis su ID „<?php echo htmlspecialchars($participant_id); ?>“ nerastas duomenų bazėje.</p>
-                        <a href="<?php echo SITE_URL; ?>/modules/admin/participants.php" class="btn btn-secondary">Grįžti į dalyvių sąrašą</a>
+                        <a href="<?php echo SITE_URL; ?>/modules/admin/participants_list.php" class="btn btn-secondary">Grįžti į dalyvių sąrašą</a>
                     <?php endif; ?>
                 </div>
             </div>

@@ -1,4 +1,10 @@
 <?php
+// Išvalome buferį
+while (ob_get_level()) { ob_end_clean(); }
+ob_start();
+error_reporting(0);
+ini_set('display_errors', 0);
+
 $root = dirname(dirname(dirname(__FILE__)));
 require_once $root . '/config/config.php';
 require_once $root . '/config/db_connect.php';
@@ -21,35 +27,38 @@ $font_file = $root . '/vendor/tcpdf/fonts/DejaVuSans.ttf';
 if (!file_exists($font_file)) die('Trūksta šrifto: DejaVuSans.ttf');
 $font_name = TCPDF_FONTS::addTTFfont($font_file, 'TrueTypeUnicode', '', 32);
 
-// Nuskaitome admino sukurtą šabloną
-$template_file = $root . '/config/diploma_template.html';
-if (file_exists($template_file)) {
-    $html_template = file_get_contents($template_file);
+// Nuskaitome admino sukurtą šabloną su paraštėmis
+$config_file = $root . '/config/diploma_layout.json';
+$old_html_file = $root . '/config/diploma_template.html';
+
+$margins = ['t' => 0, 'b' => 0, 'l' => 0, 'r' => 0]; // Numatytosios paraštės
+
+if (file_exists($config_file)) {
+    $layout = json_decode(file_get_contents($config_file), true);
+    $html_template = $layout['content_html'] ?? '';
+    $margins = [
+        't' => (int)($layout['margin_t'] ?? 0),
+        'b' => (int)($layout['margin_b'] ?? 0),
+        'l' => (int)($layout['margin_l'] ?? 0),
+        'r' => (int)($layout['margin_r'] ?? 0)
+    ];
+} elseif (file_exists($old_html_file)) {
+    $html_template = file_get_contents($old_html_file);
 } else {
-    // Jei dar nesukurtas, naudojame numatytąjį
-    $html_template = '<div style="position:relative;padding:60px 80px;text-align:center;font-family:\'{FONT_NAME}\';">
-        <div style="position:absolute;top:30px;right:40px;font-size:14px;color:#999;font-weight:bold;">{DIP_NR}</div>
-        {LOGO}
-        <h1 style="font-size:38px;margin:25px 0;font-weight:300;letter-spacing:1px;">Diplomas</h1>
-        <p style="font-size:21px;font-style:italic;color:#555;margin-bottom:45px;">Už pasiekimus respublikinėje olimpiadoje</p>
-        <div style="font-size:52px;font-weight:bold;color:#d4af37;margin:35px 0;">{VIETA}</div>
-        <div style="font-size:44px;font-weight:bold;color:#2c3e50;margin:25px 0;">{VARDAS_PAVARDE}</div>
-        <div style="font-size:26px;color:#444;margin:18px 0;line-height:1.3;">{MOKYKLA}</div>
-        <div style="font-size:24px;color:#666;margin:35px 0;font-style:italic;">„{OLIMPIADA}“</div>
-        <div style="font-size:19px;color:#888;margin-top:60px;">{DATA}</div>
-    </div>';
+    $html_template = '<h1 style="text-align:center; font-family:\'{FONT_NAME}\'; mt-5">Diplomas</h1>';
 }
 
-$year = date('Y', strtotime($dalyvis['pil_data']));
+$year = date('Y', strtotime($dalyvis['pil_data'] ?? date('Y-m-d')));
 $dip_nr = sprintf("DIP-%d-%03d", $year, $dalyvis_id);
 $vietos = ['I' => 'I vieta', 'II' => 'II vieta', 'III' => 'III vieta', 'laureat.' => 'Laureatas'];
 $vieta = $vietos[$dalyvis['Vieta']] ?? 'Dalyvis';
-$data = date('Y m. d d.', strtotime($dalyvis['pil_data']));
+$data = date('Y m. d d.', strtotime($dalyvis['pil_data'] ?? date('Y-m-d')));
+$logo = isset($logo_svg) ? $logo_svg : '';
 
 // Keičiame kintamuosius
 $html = str_replace(
     ['{FONT_NAME}', '{DIP_NR}', '{LOGO}', '{VIETA}', '{VARDAS_PAVARDE}', '{MOKYKLA}', '{OLIMPIADA}', '{DATA}'],
-    [$font_name, $dip_nr, $logo_svg, $vieta, htmlspecialchars($dalyvis['1_vardas'] . ' ' . $dalyvis['1_pavarde']), htmlspecialchars($dalyvis['mokykla'] ?? $dalyvis['var_mokykla']), htmlspecialchars($dalyvis['konkurso_pav']), $data],
+    [$font_name, $dip_nr, $logo, $vieta, htmlspecialchars($dalyvis['1_vardas'] . ' ' . $dalyvis['1_pavarde']), htmlspecialchars($dalyvis['mokykla'] ?? $dalyvis['var_mokykla']), htmlspecialchars($dalyvis['konkurso_pav']), $data],
     $html_template
 );
 
@@ -57,10 +66,17 @@ $html = str_replace(
 $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8');
 $pdf->SetCreator('Olimpiadų sistema');
 $pdf->SetTitle('Diplomas - ' . htmlspecialchars($dalyvis['1_vardas'] . ' ' . $dalyvis['1_pavarde']));
-$pdf->SetMargins(0, 0, 0);
-$pdf->SetAutoPageBreak(false);
+
+// Pritaikiame sistemoje nustatytas paraštes
+$pdf->SetMargins($margins['l'], $margins['t'], $margins['r']);
+$pdf->SetAutoPageBreak(false, $margins['b']); // False nes diplomas telpa viename puslapyje
+
 $pdf->AddPage();
 $pdf->writeHTML($html, true, false, true, false, '');
 
-// 'I' nustatymas sugeneruoja PDF ir iš karto atidaro jį naršyklės lange (nereikia net siųstis ar atskiros HTML formos)
+// Išvalome buferį
+while (ob_get_level()) { ob_end_clean(); }
+
+// Sugeneruojame PDF
 $pdf->Output('Diplomas_' . $dalyvis_id . '.pdf', 'I');
+exit;

@@ -1,7 +1,11 @@
 <?php
-/**
- * Prizininkų ataskaitos puslapis (Su rikiavimais ir puslapiavimu)
- */
+// Paslepiame visus PHP įspėjimus, kurie sugadina PDF failą
+error_reporting(0);
+ini_set('display_errors', 0);
+
+// Išvalome bet kokias ankstesnes šiukšles
+while (ob_get_level()) { ob_end_clean(); }
+ob_start();
 
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
@@ -9,52 +13,82 @@ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
 if (!is_logged_in() || !is_admin()) {
     redirect(SITE_URL . '/modules/auth/login.php');
+    exit;
 }
 
-// 1. FILTRAI
+// 2. FILTRAI (Privaloma apibrėžti prieš SQL)
 $olympiad = isset($_GET['olympiad']) ? sanitize_input($_GET['olympiad']) : '';
 $school = isset($_GET['school']) ? sanitize_input($_GET['school']) : '';
 
-// 2. RIKIAVIMAS IR PUSLAPIAVIMAS
+$where_clauses = ["d.Vieta IN ('I', 'II', 'III', 'laureat.')"];
+$params = [];
+$types = '';
+
+if (!empty($olympiad)) { 
+    $where_clauses[] = "d.konkurso_pav = ?"; 
+    $params[] = $olympiad; 
+    $types .= 's'; 
+}
+if (!empty($school)) { 
+    $where_clauses[] = "d.var_mokykla = ?"; 
+    $params[] = $school; 
+    $types .= 's'; 
+}
+$where_clause = 'WHERE ' . implode(' AND ', $where_clauses);
+
+// 3. EKSORTO LOGIKA (Turi būti čia, prieš includinant header.php)
+if (isset($_GET['export']) && $_GET['export'] == 'excel') {
+    $sql_export = "SELECT * FROM dalyviai d $where_clause";
+    $stmt_exp = db_query($sql_export, $params, $types);
+    $all_winners = $stmt_exp ? db_get_results($stmt_exp) : [];
+
+    header("Content-Type: application/vnd.ms-excel; charset=utf-8");
+    header("Content-Disposition: attachment; filename=Prizininkai_" . date('Y-m-d') . ".xls");
+    
+    // Lietuviškų raidžių palaikymas Excel (BOM)
+    print("\xEF\xBB\xBF");
+    
+    echo '<table border="1">';
+    echo '<tr><th>Olimpiada</th><th>Vardas</th><th>Pavardė</th><th>Klasė</th><th>Mokykla</th><th>Balai</th><th>Vieta</th></tr>';
+    foreach ($all_winners as $w) {
+        echo "<tr>
+                <td>{$w['konkurso_pav']}</td>
+                <td>{$w['1_vardas']}</td>
+                <td>{$w['1_pavarde']}</td>
+                <td>{$w['1_klase']}</td>
+                <td>{$w['var_mokykla']}</td>
+                <td>" . ($w['Balai'] ?? '0') . "</td>
+                <td>{$w['Vieta']}</td>
+              </tr>";
+    }
+    echo '</table>';
+    exit; 
+}
+
+// 4. RIKIAVIMAS IR PUSLAPIAVIMAS
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 25;
 if (!in_array($limit, [10, 25, 50, 100])) $limit = 25;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
-// Rikiavimo laukai (Whitelist)
-$allowed_sort = ['konkurso_pav', '1_vardas', '1_pavarde', '1_klase', 'mokykla_pilna', 'Balai', 'Vieta'];
+$allowed_sort = ['konkurso_pav', '1_vardas', '1_pavarde', '1_klase', 'Balai', 'Vieta'];
 $sort = isset($_GET['sort']) && in_array($_GET['sort'], $allowed_sort) ? $_GET['sort'] : 'konkurso_pav';
 $dir = isset($_GET['dir']) && $_GET['dir'] === 'DESC' ? 'DESC' : 'ASC';
 
-// 3. SQL UŽKLAUSA
-$where = ["d.Vieta IN ('I', 'II', 'III', 'laureat.')"];
-$params = [];
-$types = '';
-
-if (!empty($olympiad)) { $where[] = "d.konkurso_pav = ?"; $params[] = $olympiad; $types .= 's'; }
-if (!empty($school)) { $where[] = "d.var_mokykla = ?"; $params[] = $school; $types .= 's'; }
-
-$where_clause = 'WHERE ' . implode(' AND ', $where);
-
-// Bendras skaičius puslapiavimui
-$count_sql = "SELECT COUNT(*) as total FROM dalyviai d $where_clause";
-$count_stmt = db_query($count_sql, $params, $types);
-$total_items = $count_stmt ? db_get_row($count_stmt)['total'] : 0;
-
 // Duomenys
-$order_sql = ($sort === 'Balai') ? "CAST(d.Balai AS UNSIGNED) $dir" : "{$sort} {$dir}";
+$count_sql = "SELECT COUNT(*) as total FROM dalyviai d $where_clause";
+$total_items = db_get_row(db_query($count_sql, $params, $types))['total'] ?? 0;
+
+$order_sql = ($sort === 'Balai') ? "CAST(d.Balai AS UNSIGNED) $dir" : "d.$sort $dir";
 $sql = "SELECT d.*, m.pavadinimas AS mokykla_pilna 
         FROM dalyviai d 
         LEFT JOIN mokyklos m ON d.var_mokykla = m.pavadinimas 
         $where_clause 
         ORDER BY $order_sql LIMIT ?, ?";
 
-$data_params = array_merge($params, [$offset, $limit]);
-$data_types = $types . 'ii';
-$stmt = db_query($sql, $data_params, $data_types);
+$stmt = db_query($sql, array_merge($params, [$offset, $limit]), $types . 'ii');
 $winners = $stmt ? db_get_results($stmt) : [];
 
-// Pagalbinės sąrašams
 $olympiads = db_get_results(db_query("SELECT DISTINCT konkurso_pav FROM konkursai"));
 $schools = db_get_results(db_query("SELECT DISTINCT pavadinimas FROM mokyklos"));
 
@@ -89,7 +123,10 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
             </div>
             <div class="col-md-4">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filtruoti</button>
-                <a href="?" class="btn btn-secondary"><i class="fas fa-undo"></i> Atstatyti</a>
+                <a href="winners.php" class="btn btn-secondary"><i class="fas fa-undo"></i> Atstatyti</a>
+                <a href="winners.php?<?php echo http_build_query(array_merge($_GET, ['export' => 'excel'])); ?>" class="btn btn-success">
+                    <i class="fas fa-file-excel"></i> Excel
+                </a>
             </div>
         </form>
 
