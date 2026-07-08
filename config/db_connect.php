@@ -65,7 +65,14 @@ function db_get_results($stmt) {
 
 function db_insert($table, $data) {
     $conn = db_connect();
-    $columns = implode(', ', array_map(fn($col) => "`$col`", array_keys($data)));
+    
+    // IŠTAISYTA: Griežtas lentelės ir stulpelių pavadinimų filtravimas (Apsauga nuo SQLi)
+    $table_safe = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    $columns_safe = array_map(function($col) {
+        return "`" . preg_replace('/[^a-zA-Z0-9_]/', '', $col) . "`";
+    }, array_keys($data));
+    
+    $columns = implode(', ', $columns_safe);
     $placeholders = implode(', ', array_fill(0, count($data), '?'));
     $values = array_values($data);
     
@@ -76,7 +83,7 @@ function db_insert($table, $data) {
         else $types .= 's';
     }
     
-    $sql = "INSERT INTO `$table` ($columns) VALUES ($placeholders)";
+    $sql = "INSERT INTO `$table_safe` ($columns) VALUES ($placeholders)";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param($types, ...$values);
     return $stmt->execute();
@@ -86,12 +93,18 @@ function db_insert($table, $data) {
  * Atnaujinti duomenis lentelėje
  */
 function db_update($table, $data, $where, $where_params = []) {
+    // IŠTAISYTA: Griežtas lentelės pavadinimo filtravimas
+    $table_safe = preg_replace('/[^a-zA-Z0-9_]/', '', $table);
+    
     $set = [];
     $types = '';
     $values = [];
 
     foreach ($data as $column => $value) {
-        $set[] = "`" . str_replace("`", "``", $column) . "` = ?";
+        // IŠTAISYTA: Griežtas stulpelių filtravimas
+        $col_safe = preg_replace('/[^a-zA-Z0-9_]/', '', $column);
+        $set[] = "`$col_safe` = ?";
+        
         if (is_int($value))        $types .= 'i';
         elseif (is_float($value))  $types .= 'd';
         else                       $types .= 's';
@@ -104,7 +117,7 @@ function db_update($table, $data, $where, $where_params = []) {
         else                       $types .= 's';
     }
 
-    $sql = "UPDATE `$table` SET " . implode(', ', $set) . " WHERE $where";
+    $sql = "UPDATE `$table_safe` SET " . implode(', ', $set) . " WHERE $where";
     $params = array_merge($values, $where_params);
 
     $stmt = db_connect()->prepare($sql);

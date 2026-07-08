@@ -17,7 +17,9 @@
    
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
  <script src="<?php echo SITE_URL; ?>/assets/js/main.js"></script>
+<?php require_once dirname(dirname(__FILE__)) . '/modules/reports/kalendorius.php'; ?>
 
+<?php require_once dirname(__FILE__) . '/cookie_banner.php'; ?>
 </body>
 </html>
 <?php if (function_exists('is_logged_in') && is_logged_in()): ?>
@@ -141,6 +143,42 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Paleidžiame pirmą kartą
     resetTimers();
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Randame visas nuorodas puslapyje
+    const allLinks = document.querySelectorAll('a, button');
+    
+    allLinks.forEach(function(el) {
+        // Paimame mygtuko tekstą mažosiomis raidėmis
+        const text = el.textContent.trim().toLowerCase();
+        
+        // Jei tai yra "Grįžti" mygtukas
+        if (text.includes('grįžti') || text.includes('atgal')) {
+            
+            // Jei tai <a> žyma, išsaugome originalų adresą kaip atsarginį (fallback)
+            const fallbackUrl = (el.tagName.toLowerCase() === 'a') ? el.getAttribute('href') : null;
+            
+            // Ignoruojame, jei mygtukas jau turi kietai įkoduotą javascript veiksmą
+            if (!fallbackUrl || !fallbackUrl.includes('javascript:')) {
+                
+                el.addEventListener('click', function(e) {
+                    e.preventDefault(); // Sustabdome standartinį perėjimą
+                    
+                    // Tikriname naršymo istoriją. 
+                    // Jei vartotojas atėjo iš mūsų sistemos (o ne suvedė adresą ranka) - grąžiname tiksliai atgal.
+                    if (window.history.length > 1 && document.referrer.indexOf(window.location.host) !== -1) {
+                        window.history.back();
+                    } else if (fallbackUrl && fallbackUrl !== '#') {
+                        // Jei atidaryta naujame skirtuke, naudojame originalią nuorodą
+                        window.location.href = fallbackUrl;
+                    }
+                });
+            }
+        }
+    });
 });
 </script>
 <?php endif; ?>

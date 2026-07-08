@@ -1,0 +1,20 @@
+{
+    "primary_color": "#2173c4",
+    "success_color": "#198754",
+    "warning_color": "#ffc107",
+    "info_color": "#0dcaf0",
+    "danger_color": "#dc3545",
+    "body_bg": "#b7c8bd",
+    "text_color": "#000000",
+    "header_bg": "#ee1b1b",
+    "header_text": "#495057",
+    "sidebar_bg": "#212529",
+    "sidebar_text": "#080808",
+    "sidebar_hover": "#343a40",
+    "card_bg": "#ffffff",
+    "card_header_bg": "#f8f9fa",
+    "footer_bg": "#ffffff",
+    "footer_text": "#6c757d",
+    "logo_path": "assets/img/logo_1783494031.jpg",
+    "logo_width": "150px"
+}

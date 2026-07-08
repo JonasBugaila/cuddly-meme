@@ -127,7 +127,18 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <a href="<?php echo SITE_URL; ?>/modules/admin/print_template.php" class="btn btn-primary">Ataskaitų šablonai</a>
                             </div>
                         </div>
-					</div>	
+					</div>
+<div class="col-md-4">
+						 <div class="card admin-card mb-4">
+                            <div class="card-header">
+                                <h3>Sistemos spalvos</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>Sistemos spalvų redagavimas.</p>
+                                <a href="<?php echo SITE_URL; ?>/modules/admin/theme_settings.php" class="btn btn-primary">Sistemos spalvos</a>
+                            </div>
+                        </div>
+					</div>						
                 </div>
             </div>
         </div>

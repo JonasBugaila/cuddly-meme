@@ -154,9 +154,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                 <h1>Protokolai</h1>
                 <div>
                     <?php if (!empty($grouped_participants)): ?>
-                        <a href="<?php echo SITE_URL; ?>/modules/reports/protocols.php?olympiad=<?php echo urlencode($selected_olympiad); ?>&print=1" target="_blank" class="btn btn-primary">Spausdinti</a>
+                        <a href="<?php echo SITE_URL; ?>/modules/reports/protocols.php?olympiad=<?php echo urlencode($selected_olympiad); ?>&print=1" class="btn btn-primary">Spausdinti</a>
                     <?php endif; ?>
-                    <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" class="btn btn-secondary">Grįžti į ataskaitas</a>
+                    <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" onclick="if(window.opener !== null || window.history.length <= 1) { window.close(); return false; }" class="btn btn-secondary">Grįžti į ataskaitas</a>
                 </div>
             </div>
             <div class="card-body">

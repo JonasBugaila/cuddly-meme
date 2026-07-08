@@ -1,8 +1,7 @@
 <?php
 /**
  * Dalyvių ataskaitos puslapis su spausdinimo funkcija
- * 
- * Šis failas atvaizduoja dalyvių ataskaitas pagal olimpiadas
+ * * Šis failas atvaizduoja dalyvių ataskaitas pagal olimpiadas
  * ir leidžia jas spausdinti
  */
 
@@ -113,7 +112,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     <?php if (!empty($winners)): ?>
                         <a href="<?php echo SITE_URL; ?>/modules/reports/signature_sheets.php?olympiad=<?php echo urlencode($olympiad); ?>&print=1" target="_blank" class="btn btn-primary">Spausdinti</a>
                     <?php endif; ?>
-                    <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" class="btn btn-secondary">Grįžti į ataskaitas</a>
+                    <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" onclick="if(window.opener !== null || window.history.length <= 1) { window.close(); return false; }" class="btn btn-secondary">Grįžti į ataskaitas</a>
                 </div>
             </div>
             <div class="card-body">
@@ -125,7 +124,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <select class="form-control" id="olympiad" name="olympiad">
                                     <option value="">Visos olimpiados</option>
                                     <?php foreach ($olympiads as $o): ?>
-                                        <option value="<?php echo $o['konkurso_pav']; ?>" <?php echo $olympiad == $o['konkurso_pav'] ? 'selected' : ''; ?>><?php echo $o['konkurso_pav']; ?></option>
+                                        <option value="<?php echo htmlspecialchars($o['konkurso_pav']); ?>" <?php echo $olympiad == $o['konkurso_pav'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($o['konkurso_pav']); ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>

@@ -1,10 +1,6 @@
 <?php
-// Paslepiame visus PHP įspėjimus, kurie sugadina PDF failą
-error_reporting(0);
-ini_set('display_errors', 0);
-
-// Išvalome bet kokias ankstesnes šiukšles
-while (ob_get_level()) { ob_end_clean(); }
+// 1. Išvalome buferį prieš viską
+if (ob_get_length()) ob_end_clean();
 ob_start();
 
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';

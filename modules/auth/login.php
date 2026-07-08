@@ -4,9 +4,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
-// Įjungiame klaidų rodymą
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
+// IŠTAISYTA: Saugumo sumetimais produkcijoje klaidų rodymas išjungiamas
+ini_set('display_errors', 0);
+error_reporting(0);
 
 // Jei vartotojas jau prisijungęs, nukreipiame į pagrindinį puslapį
 if (is_logged_in()) {
@@ -64,6 +64,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     // Sėkmingas prisijungimas
                     start_session();
+                    
+                    // IŠTAISYTA: Apsauga nuo Sesijos Fiksacijos (Session Fixation)
+                    session_regenerate_id(true);
+                    
                     $_SESSION['user_id'] = $user['vart_id'];
                     $_SESSION['user_name'] = $user['var_vardas'] . ' ' . $user['var_pavarde'];
                     $_SESSION['user_level'] = $user['vart_lygis'];
@@ -101,11 +105,11 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 
 <div class="row justify-content-center">
     <div class="col-md-6">
-        <div class="card mt-5">
-            <div class="card-header bg-primary text-white">
-                <h2 class="mb-0">Prisijungimas</h2>
+        <div class="card mt-5 shadow-sm border-0">
+            <div class="card-header bg-primary text-white py-3">
+                <h2 class="mb-0 h4"><i class="fas fa-sign-in-alt me-2"></i> Prisijungimas</h2>
             </div>
-            <div class="card-body">
+            <div class="card-body p-4">
                 <?php display_message(); ?>
                 <form action="<?php echo SITE_URL; ?>/modules/auth/login.php" method="post" class="needs-validation" novalidate>
                     <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
@@ -115,17 +119,17 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <input type="text" class="form-control" id="username" name="username" required>
                     </div>
 
-                    <div class="form-group mb-3">
+                    <div class="form-group mb-4">
                         <label for="password" class="form-label fw-bold">Slaptažodis</label>
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
 
                     <div class="form-group mb-4">
-                        <button type="submit" class="btn btn-primary w-100">Prisijungti</button>
+                        <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold">Prisijungti</button>
                     </div>
 
                     <div class="form-group text-center">
-                        <p class="text-muted small">Pamiršote slaptažodį? Susisiekite su sistemos administratoriumi.</p>
+                        <p class="text-muted small mb-0">Pamiršote slaptažodį? Susisiekite su sistemos administratoriumi.</p>
                     </div>
                 </form>
             </div>

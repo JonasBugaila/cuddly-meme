@@ -80,10 +80,10 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                 <a href="../reports/result_sheet.php?olympiad_id=<?=$olympiad['konk_id']?>" class="btn btn-info text-white"><i class="fas fa-check-square"></i> Suvesti rezultatus</a>
             <?php endif; ?>
             
-            <a href="../reports/participant_id.php?olympiad=<?=urlencode($olympiad['konkurso_pav'])?>" target="_blank" class="btn btn-dark"><i class="fas fa-barcode"></i> Kodų lapas</a>
+            <a href="../reports/participant_id.php?olympiad=<?=urlencode($olympiad['konkurso_pav'])?>" class="btn btn-dark"><i class="fas fa-barcode"></i> Kodų lapas</a>
             <a href="../reports/signature_sheets.php?print_empty=1&olympiad=<?=urlencode($olympiad['konkurso_pav'])?>" class="btn btn-warning"><i class="fas fa-file-signature"></i> Parašų lapas</a>
-            <a href="../reports/evaluation_sheets.php?print_empty=1&olympiad=<?=urlencode($olympiad['konkurso_pav'])?>" target="_blank" class="btn btn-primary"><i class="fas fa-clipboard-list"></i> Vertinimo lapai</a>
-            <a href="../reports/protocols.php?olympiad=<?=urlencode($olympiad['konkurso_pav'])?>" target="_blank" class="btn btn-secondary"><i class="fas fa-file-alt"></i> Protokolas</a>
+            <a href="../reports/evaluation_sheets.php?print_empty=1&olympiad=<?=urlencode($olympiad['konkurso_pav'])?>" class="btn btn-primary"><i class="fas fa-clipboard-list"></i> Vertinimo lapai</a>
+            <a href="../reports/protocols.php?olympiad=<?=urlencode($olympiad['konkurso_pav'])?>" class="btn btn-secondary"><i class="fas fa-file-alt"></i> Protokolas</a>
         </div>
     </div>
 </div>

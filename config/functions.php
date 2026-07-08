@@ -1,7 +1,7 @@
 <?php
 /**
  * Bendros funkcijos
- * * Šiame faile saugomos bendros funkcijos, naudojamos visoje sistemoje
+ * Šiame faile saugomos bendros funkcijos, naudojamos visoje sistemoje
  */
 
 function sanitize_input($data) {
@@ -76,8 +76,9 @@ function get_message() {
 function display_message() {
     $message = get_message();
     if ($message) {
-        $type_class = 'alert-' . $message['type'];
-        echo "<div class='alert $type_class'>{$message['text']}</div>";
+        $type_class = 'alert-' . sanitize_input($message['type']);
+        $safe_text = htmlspecialchars($message['text'], ENT_QUOTES, 'UTF-8');
+        echo "<div class='alert {$type_class}'>{$safe_text}</div>";
     }
 }
 
@@ -133,7 +134,10 @@ function generate_printable_table($title, $institution, $headers, $data, $option
     
     $html .= '<div class="d-print-none mb-4 pb-3 border-bottom d-flex justify-content-between">';
     $html .= '<div><button onclick="window.print();" class="btn btn-primary btn-lg me-2"><i class="fas fa-print"></i> Spausdinti ataskaitą</button>';
-    $html .= '<button onclick="window.history.back();" class="btn btn-secondary btn-lg"><i class="fas fa-arrow-left"></i> Grįžti atgal</button></div>';
+    
+    // IŠTAISYTA: Išmanus mygtukas, kuris arba grįžta atgal, arba uždaro langą, jei jis buvo atidarytas naujame skirtuke
+    $html .= '<button onclick="if(window.opener !== null || window.history.length <= 1) { window.close(); } else { window.history.back(); }" class="btn btn-secondary btn-lg"><i class="fas fa-arrow-left"></i> Grįžti / Užverti</button></div>';
+    
     $html .= '</div>';
     
     $html .= '<div id="' . $print_id . '_printable" class="print-wrapper" style="counter-reset: page 0;">';
@@ -169,7 +173,7 @@ function generate_printable_table($title, $institution, $headers, $data, $option
                 font-size: ' . (int)($layout['font_size'] ?? 12) . 'pt !important; 
             }
             @page { 
-                margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)$layout['margin_r'] . 'mm ' . (int)$layout['margin_b'] . 'mm ' . (int)$layout['margin_l'] . 'mm; 
+                margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)($layout['margin_r'] ?? 20) . 'mm ' . (int)($layout['margin_b'] ?? 20) . 'mm ' . (int)($layout['margin_l'] ?? 20) . 'mm; 
             }
             .d-print-none { display: none !important; }
             .bg-white { box-shadow: none !important; padding: 0 !important; }
@@ -268,9 +272,6 @@ function log_action($action, $details = '') {
  * =====================================================================
  */
 
-/**
- * Generuoja URL pridedant arba pakeičiant GET parametrus
- */
 function build_url_with_params($new_params) {
     $query_params = $_GET;
     foreach ($new_params as $key => $value) {
@@ -279,13 +280,9 @@ function build_url_with_params($new_params) {
     return '?' . http_build_query($query_params);
 }
 
-/**
- * Generuoja rikiuojamą lentelės antraštę (HTML)
- */
 function generate_sortable_header($column_db_name, $label, $current_sort, $current_dir) {
-    // Jei paspaudžiama ant jau rikiuojamo stulpelio, keičiame kryptį. Kitaip - numatytoji ASC.
     $next_dir = ($current_sort === $column_db_name && $current_dir === 'ASC') ? 'DESC' : 'ASC';
-    $url = build_url_with_params(['sort' => $column_db_name, 'dir' => $next_dir, 'page' => 1]); // Keičiant rikiavimą grąžiname į 1 puslapį
+    $url = build_url_with_params(['sort' => $column_db_name, 'dir' => $next_dir, 'page' => 1]);
     
     $icon = '';
     if ($current_sort === $column_db_name) {
@@ -297,18 +294,14 @@ function generate_sortable_header($column_db_name, $label, $current_sort, $curre
     return "<a href=\"{$url}\" class=\"text-dark text-decoration-none\">{$label}{$icon}</a>";
 }
 
-/**
- * Generuoja puslapiavimo elementus (HTML) ir limito pasirinkimą
- */
 function render_pagination($total_items, $limit, $current_page) {
     $total_pages = ceil($total_items / $limit);
-    if ($total_pages <= 1 && $total_items <= 10) return ''; // Nerodome jei nėra prasmės
+    if ($total_pages <= 1 && $total_items <= 10) return ''; 
 
     $limits = [10, 25, 50, 100];
     
     echo '<div class="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-3">';
     
-    // Limito pasirinkimas (puslapyje rodomų elementų skaičius)
     echo '<div class="d-flex align-items-center">';
     echo '<span class="me-2 text-muted">Rodyti:</span>';
     echo '<select class="form-select form-select-sm w-auto" onchange="window.location.href=this.value;">';
@@ -321,17 +314,14 @@ function render_pagination($total_items, $limit, $current_page) {
     echo "<span class=\"ms-3 text-muted small\">Iš viso: <strong>{$total_items}</strong></span>";
     echo '</div>';
 
-    // Puslapiai (1, 2, 3...)
     if ($total_pages > 1) {
         echo '<nav aria-label="Page navigation">';
         echo '<ul class="pagination pagination-sm mb-0">';
         
-        // Atgal mygtukas
         $prev_disabled = ($current_page <= 1) ? 'disabled' : '';
         $prev_url = build_url_with_params(['page' => max(1, $current_page - 1)]);
         echo "<li class=\"page-item {$prev_disabled}\"><a class=\"page-link\" href=\"{$prev_url}\">&laquo;</a></li>";
         
-        // Puslapių numeriai (rodome protingą rėžį, kad nebūtų 100 mygtukų)
         $start_page = max(1, $current_page - 2);
         $end_page = min($total_pages, $current_page + 2);
         
@@ -351,7 +341,6 @@ function render_pagination($total_items, $limit, $current_page) {
             echo "<li class=\"page-item\"><a class=\"page-link\" href=\"" . build_url_with_params(['page' => $total_pages]) . "\">{$total_pages}</a></li>";
         }
 
-        // Pirmyn mygtukas
         $next_disabled = ($current_page >= $total_pages) ? 'disabled' : '';
         $next_url = build_url_with_params(['page' => min($total_pages, $current_page + 1)]);
         echo "<li class=\"page-item {$next_disabled}\"><a class=\"page-link\" href=\"{$next_url}\">&raquo;</a></li>";
@@ -360,9 +349,7 @@ function render_pagination($total_items, $limit, $current_page) {
     }
     echo '</div>';
 }
-/**
- * Gauna spausdinimo maketo nustatymus (Atsargiai sukuria numatytuosius, jei failo nėra)
- */
+
 function get_print_layout() {
     $file = dirname(dirname(dirname(__FILE__))) .'/config/print_layout.json';
     if (file_exists($file)) {
@@ -378,6 +365,46 @@ function get_print_layout() {
         'font_size' => 12
     ];
 }
+/**
+ * Gauna pilnus sistemos dizaino (temos) nustatymus iš JSON failo
+ */
+function get_system_theme() {
+    $theme_file = dirname(dirname(__FILE__)) . '/config/theme.json';
+    
+    // Pilnas visų sistemos elementų numatytasis sąrašas
+    $default_theme = [
+        'primary_color'  => '#0d6efd',
+        'success_color'  => '#198754',
+        'warning_color'  => '#ffc107',
+        'info_color'     => '#0dcaf0',
+        'danger_color'   => '#dc3545',
+        
+        'body_bg'        => '#f8f9fa',
+        'text_color'     => '#333333',
+        
+        'header_bg'      => '#ffffff',
+        'header_text'    => '#495057',
+        
+        'sidebar_bg'     => '#212529',
+        'sidebar_text'   => '#ffffff',
+        'sidebar_hover'  => '#343a40',
+        
+        'card_bg'        => '#ffffff',
+        'card_header_bg' => '#f8f9fa',
+        
+        'footer_bg'      => '#ffffff',
+        'footer_text'    => '#6c757d',
+        
+        'logo_path'      => 'assets/img/logo.png',
+        'logo_width'     => '150px'
+    ];
 
+    if (file_exists($theme_file)) {
+        $custom_theme = json_decode(file_get_contents($theme_file), true);
+        if (is_array($custom_theme)) {
+            return array_merge($default_theme, $custom_theme);
+        }
+    }
+    return $default_theme;
+}
 ?>
-

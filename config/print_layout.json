@@ -1,0 +1,9 @@
+{
+    "header_html": "<div style=\"text-align: center; margin-bottom: 20px;\">\r\n<h3>{{INSTITUTION}}<\/h3>\r\n<h4 style=\"color: #444;\">{{TITLE}}<\/h4>\r\n<p>testas<\/p>\r\n<\/div>",
+    "footer_html": "<div style=\"margin-top: 50px; display: flex; justify-content: space-between;\">\r\n<p><strong>Komisijos pirmininkas:<\/strong> ___________________<\/p>\r\n<p><strong>Data:<\/strong> {{DATE}}<\/p>\r\n<\/div>",
+    "margin_t": 20,
+    "margin_b": 20,
+    "margin_l": 20,
+    "margin_r": 20,
+    "font_size": 12
+}
