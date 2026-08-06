@@ -26,6 +26,7 @@ start_session();
 // Užkrauname dinaminę temą
 $system_theme = get_system_theme(); 
 
+// Funkcija RGB konversijai (reikalinga permatomumui ir šešėliams)
 function hexToRgbStr($hex) {
     $hex = str_replace('#', '', $hex);
     if(strlen($hex) == 3) {
@@ -37,133 +38,144 @@ function hexToRgbStr($hex) {
         $g = hexdec(substr($hex,2,2));
         $b = hexdec(substr($hex,4,2));
     }
-    return $r . ', ' . $g . ', ' . $b;
+    return "$r, $g, $b";
 }
 ?>
 <style>
 :root {
+    /* ========================================================= */
+    /* 1. JŪSŲ ASMENINIO style.css KINTAMŲJŲ PERRAŠYMAS          */
+    /* ========================================================= */
+    --primary-color: <?php echo $system_theme['primary_color']; ?>;
+    --secondary-color: <?php echo $system_theme['secondary_color']; ?>;
+    --background-color: <?php echo $system_theme['body_bg']; ?>;
+    --text-color: <?php echo $system_theme['text_color']; ?>;
+    --success-color: <?php echo $system_theme['success_color']; ?>;
+    --error-color: <?php echo $system_theme['danger_color']; ?>;
+    --warning-color: <?php echo $system_theme['warning_color']; ?>;
+    --info-color: <?php echo $system_theme['info_color']; ?>;
+    /* Sukuriame šviesų akcentą kortelėms ir hover efektams iš pagrindinės spalvos */
+    --accent-color: rgba(<?php echo hexToRgbStr($system_theme['primary_color']); ?>, 0.08);
+
+    /* ========================================================= */
+    /* 2. BOOTSTRAP 5 IR SISTEMOS BAZINIAI KINTAMIEJI            */
+    /* ========================================================= */
     --bs-primary: <?php echo $system_theme['primary_color']; ?>;
     --bs-primary-rgb: <?php echo hexToRgbStr($system_theme['primary_color']); ?>;
+    --bs-secondary: <?php echo $system_theme['secondary_color']; ?>;
+    --bs-secondary-rgb: <?php echo hexToRgbStr($system_theme['secondary_color']); ?>;
     --bs-success: <?php echo $system_theme['success_color']; ?>;
     --bs-success-rgb: <?php echo hexToRgbStr($system_theme['success_color']); ?>;
-    --bs-warning: <?php echo $system_theme['warning_color']; ?>;
-    --bs-warning-rgb: <?php echo hexToRgbStr($system_theme['warning_color']); ?>;
     --bs-info: <?php echo $system_theme['info_color']; ?>;
     --bs-info-rgb: <?php echo hexToRgbStr($system_theme['info_color']); ?>;
+    --bs-warning: <?php echo $system_theme['warning_color']; ?>;
+    --bs-warning-rgb: <?php echo hexToRgbStr($system_theme['warning_color']); ?>;
     --bs-danger: <?php echo $system_theme['danger_color']; ?>;
     --bs-danger-rgb: <?php echo hexToRgbStr($system_theme['danger_color']); ?>;
 
     --bs-body-bg: <?php echo $system_theme['body_bg']; ?>;
     --bs-body-color: <?php echo $system_theme['text_color']; ?>;
-    
-    --theme-header-bg: <?php echo $system_theme['header_bg']; ?>;
-    --theme-header-text: <?php echo $system_theme['header_text']; ?>;
-    
+
+    --theme-topbar-bg: <?php echo $system_theme['topbar_bg']; ?>;
+    --theme-topbar-text: <?php echo $system_theme['topbar_text']; ?>;
+    --theme-topbar-hover: <?php echo $system_theme['topbar_hover']; ?>;
+
     --theme-sidebar-bg: <?php echo $system_theme['sidebar_bg']; ?>;
     --theme-sidebar-text: <?php echo $system_theme['sidebar_text']; ?>;
-    --theme-sidebar-hover: <?php echo $system_theme['sidebar_hover']; ?>;
-    
+    --theme-sidebar-hover-bg: <?php echo $system_theme['sidebar_hover_bg']; ?>;
+    --theme-sidebar-active-bg: <?php echo $system_theme['sidebar_active_bg']; ?>;
+    --theme-sidebar-active-text: <?php echo $system_theme['sidebar_active_text']; ?>;
+
     --theme-card-bg: <?php echo $system_theme['card_bg']; ?>;
     --theme-card-header: <?php echo $system_theme['card_header_bg']; ?>;
-    
+    --theme-card-border: <?php echo $system_theme['card_border']; ?>;
+    --theme-table-header-bg: <?php echo $system_theme['table_header_bg']; ?>;
+    --theme-table-header-text: <?php echo $system_theme['table_header_text']; ?>;
+
     --theme-footer-bg: <?php echo $system_theme['footer_bg']; ?>;
     --theme-footer-text: <?php echo $system_theme['footer_text']; ?>;
 }
 
-body { background-color: var(--bs-body-bg) !important; color: var(--bs-body-color) !important; }
+/* ================= 1. BENDRA (KŪNAS IR TEKSTAS) ================= */
+body, #wrapper { background-color: var(--theme-body-bg) !important; color: var(--theme-text) !important; }
+.text-gray-800, .text-gray-900, h1, h2, h3, h4, h5, h6 { color: var(--theme-text) !important; }
 
-/* ================= 1. MYGTUKAI IR JŲ UŽVEDIMO (HOVER) EFEKTAI ================= */
-.btn-primary { background-color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; color: #fff !important; }
-.btn-primary:hover, .btn-primary:focus { filter: brightness(85%); color: #fff !important; }
-
-.btn-success { background-color: var(--bs-success) !important; border-color: var(--bs-success) !important; color: #fff !important; }
-.btn-success:hover, .btn-success:focus { filter: brightness(85%); color: #fff !important; }
-
-.btn-warning { background-color: var(--bs-warning) !important; border-color: var(--bs-warning) !important; color: #000 !important; }
-.btn-warning:hover, .btn-warning:focus { filter: brightness(85%); color: #000 !important; }
-
-.btn-info { background-color: var(--bs-info) !important; border-color: var(--bs-info) !important; color: #fff !important; }
-.btn-info:hover, .btn-info:focus { filter: brightness(85%); color: #fff !important; }
-
-.btn-danger { background-color: var(--bs-danger) !important; border-color: var(--bs-danger) !important; color: #fff !important; }
-.btn-danger:hover, .btn-danger:focus { filter: brightness(85%); color: #fff !important; }
-
-/* Mygtukai su rėmeliu (Outline) */
-.btn-outline-primary { color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; }
-.btn-outline-primary:hover { background-color: var(--bs-primary) !important; color: #fff !important; }
-.btn-outline-success { color: var(--bs-success) !important; border-color: var(--bs-success) !important; }
-.btn-outline-success:hover { background-color: var(--bs-success) !important; color: #fff !important; }
-.btn-outline-info { color: var(--bs-info) !important; border-color: var(--bs-info) !important; }
-.btn-outline-info:hover { background-color: var(--bs-info) !important; color: #fff !important; }
-
-/* ================= 2. VIRŠUTINĖ MENIU JUOSTA (HEADER / TOPBAR) ================= */
-/* Agresyviai perrašome fono klases, tokias kaip .bg-white */
-header, .navbar, .topbar, .navbar.bg-white, .topbar.bg-white { 
-    background-color: var(--theme-header-bg) !important; 
-    border-bottom: 1px solid rgba(0,0,0,0.1) !important;
+/* ================= 2. VIRŠUTINĖ JUOSTA (TOPBAR / HEADER / NAV) ================= */
+/* Pridėta palaikymas seniesiems .header ir .nav iš style.css, naikinami seni gradientai */
+nav.topbar, .navbar, .header, .nav { 
+    background-color: var(--theme-topbar-bg) !important; 
+    background-image: none !important; /* Naikina style.css esantį gradientą */
+    border-bottom: 1px solid rgba(0,0,0,0.05) !important; 
 }
-
-/* Viršutinės juostos tekstas, nuorodos, ikonėlės ir dropdown meniu mygtukai */
-.navbar .nav-link, 
-.topbar .nav-link, 
-.navbar-brand, 
-.topbar .nav-item .nav-link span,
-.topbar .nav-link i,
-.topbar .dropdown-toggle,
-.topbar .text-gray-600 { 
-    color: var(--theme-header-text) !important; 
-}
-
-/* Užvedus pelę ant viršutinio meniu punktų */
-.navbar .nav-link:hover, 
-.topbar .nav-link:hover, 
-.topbar .nav-link:hover i,
-.topbar .nav-link:hover span { 
-    color: var(--bs-primary) !important; /* Naudoja pagrindinę (Primary) spalvą */
-    opacity: 0.8;
-}
+nav.topbar .nav-link, nav.topbar .nav-link i, nav.topbar .nav-link span, .topbar .dropdown-toggle, .nav-link { color: var(--theme-topbar-text) !important; }
+nav.topbar .nav-link:hover, nav.topbar .nav-link:hover i, nav.topbar .nav-link:hover span, .nav-link:hover { color: var(--theme-topbar-hover) !important; background-color: transparent !important; }
+.nav-link.active { color: var(--theme-topbar-hover) !important; border-bottom: 2px solid var(--theme-topbar-hover) !important; }
 
 /* ================= 3. ŠONINIS MENIU (SIDEBAR) ================= */
-aside, .sidebar, .main-menu, .sidebar.bg-gradient-primary { 
-    background-color: var(--theme-sidebar-bg) !important;
-    background-image: none !important; /* Išjungiame originalų Bootstrap gradientą */
-}
-.sidebar .nav-item .nav-link, .sidebar .nav-item .nav-link i, .sidebar-brand-text { 
-    color: var(--theme-sidebar-text) !important; 
-}
-.sidebar .nav-item:hover .nav-link, .sidebar .nav-item.active .nav-link { 
-    background-color: var(--theme-sidebar-hover) !important;
-    color: #fff !important;
-}
+.sidebar, .sidebar.bg-gradient-primary { background: var(--theme-sidebar-bg) !important; background-image: none !important;}
+.sidebar .nav-item .nav-link, .sidebar .nav-item .nav-link i, .sidebar-brand-text { color: var(--theme-sidebar-text) !important; }
+.sidebar .nav-item .nav-link:hover, .sidebar .nav-item .nav-link:hover i { background-color: var(--theme-sidebar-hover-bg) !important; color: var(--theme-sidebar-text) !important; opacity: 1 !important;}
+.sidebar .nav-item.active .nav-link { background-color: var(--theme-sidebar-active-bg) !important; color: var(--theme-sidebar-active-text) !important; }
+.sidebar .nav-item.active .nav-link i { color: var(--theme-sidebar-active-text) !important; }
 
-/* ================= 4. KORTELĖS IR SĄRAŠAI ================= */
-.card, .list-group-item { background-color: var(--theme-card-bg) !important; color: var(--bs-body-color) !important; }
-.card-header { background-color: var(--theme-card-header) !important; border-bottom: 1px solid rgba(0,0,0,0.1); }
-.list-group-item { border-color: rgba(0,0,0,0.1) !important; }
-
-/* ================= 5. APATINĖ JUOSTA (FOOTER) ================= */
-footer, .footer, .sticky-footer { 
-    background-color: var(--theme-footer-bg) !important; 
-    color: var(--theme-footer-text) !important; 
+/* ================= 4. KORTELĖS IR ELEMENTAI ================= */
+.card, .list-group-item { background-color: var(--theme-card-bg) !important; border-color: var(--theme-card-border) !important; color: var(--theme-text) !important; }
+/* style.css turėjo savo card-header gradientus - juos išjungiame ir priverčiame naudoti spalvą iš nustatymų */
+.card-header { 
+    background-color: var(--theme-card-header) !important; 
+    background-image: none !important; 
+    color: var(--theme-text) !important;
+    border-bottom: 1px solid var(--theme-card-border) !important; 
 }
-.footer .copyright span { color: var(--theme-footer-text) !important; }
+.border-left-primary, .border-primary { border-left-color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; }
+.border-left-success, .border-success { border-left-color: var(--bs-success) !important; border-color: var(--bs-success) !important; }
+.border-left-info, .border-info { border-left-color: var(--bs-info) !important; border-color: var(--bs-info) !important; }
+.border-left-warning, .border-warning { border-left-color: var(--bs-warning) !important; border-color: var(--bs-warning) !important; }
 
-/* ================= 6. BENDRI ELEMENTAI (Fonas, Tekstas, Iššokantys langai) ================= */
+/* ================= 5. LENTELĖS (TABLES) ================= */
+.table { color: var(--theme-text) !important; }
+.table thead th, .table-light th, .table-light { background-color: var(--theme-table-header-bg) !important; color: var(--theme-table-header-text) !important; border-bottom: 2px solid var(--theme-card-border) !important; }
+.table td, .table th { border-color: var(--theme-card-border); }
+.pagination .page-item.active .page-link { background-color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; color: #fff !important; }
+.pagination .page-link { color: var(--bs-primary); }
+
+/* ================= 6. MYGTUKAI ================= */
+.btn-primary { background-color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; color: #fff !important; }
+.btn-primary:hover { filter: brightness(85%); background-color: var(--bs-primary) !important; }
+.btn-primary:focus { box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), .5) !important; }
+
+.btn-secondary { background-color: var(--bs-secondary) !important; border-color: var(--bs-secondary) !important; color: #fff !important; }
+.btn-secondary:hover { filter: brightness(85%); background-color: var(--bs-secondary) !important; }
+
+.btn-success { background-color: var(--bs-success) !important; border-color: var(--bs-success) !important; color: #fff !important; }
+.btn-success:hover { filter: brightness(85%); background-color: var(--bs-success) !important; }
+
+.btn-info { background-color: var(--bs-info) !important; border-color: var(--bs-info) !important; color: #fff !important; }
+.btn-info:hover { filter: brightness(85%); background-color: var(--bs-info) !important; }
+
+.btn-warning { background-color: var(--bs-warning) !important; border-color: var(--bs-warning) !important; color: #000 !important; }
+.btn-warning:hover { filter: brightness(85%); background-color: var(--bs-warning) !important; }
+
+.btn-danger { background-color: var(--bs-danger) !important; border-color: var(--bs-danger) !important; color: #fff !important; }
+.btn-danger:hover { filter: brightness(85%); background-color: var(--bs-danger) !important; }
+
+.btn-outline-primary { color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; }
+.btn-outline-primary:hover { background-color: var(--bs-primary) !important; color: #fff !important; }
+
+/* Fono, teksto ir ženklelių (Badges) helper klasės */
 .bg-primary, .badge.bg-primary { background-color: var(--bs-primary) !important; color: #fff !important; }
 .bg-success, .badge.bg-success { background-color: var(--bs-success) !important; color: #fff !important; }
 .bg-warning, .badge.bg-warning { background-color: var(--bs-warning) !important; color: #000 !important; }
 .text-primary { color: var(--bs-primary) !important; }
 .text-success { color: var(--bs-success) !important; }
-.border-primary { border-color: var(--bs-primary) !important; }
-.border-success { border-color: var(--bs-success) !important; }
 
+/* Iššokantys pranešimai (Alerts) su permatomumu */
 .alert-primary { background-color: rgba(var(--bs-primary-rgb), 0.15) !important; border-color: rgba(var(--bs-primary-rgb), 0.3) !important; color: var(--bs-primary) !important; }
 .alert-success { background-color: rgba(var(--bs-success-rgb), 0.15) !important; border-color: rgba(var(--bs-success-rgb), 0.3) !important; color: var(--bs-success) !important; }
-.alert-danger  { background-color: rgba(var(--bs-danger-rgb), 0.15) !important; border-color: rgba(var(--bs-danger-rgb), 0.3) !important; color: var(--bs-danger) !important; }
+.alert-danger, .alert-error { background-color: rgba(var(--bs-danger-rgb), 0.15) !important; border-color: rgba(var(--bs-danger-rgb), 0.3) !important; color: var(--bs-danger) !important; }
 
-.pagination .page-item.active .page-link { background-color: var(--bs-primary) !important; border-color: var(--bs-primary) !important; color: #fff !important; }
-.pagination .page-link { color: var(--bs-primary); }
-
+/* ================= 7. PORAŠTĖ IR LOGOTIPAS ================= */
+footer, .footer, .sticky-footer { background-color: var(--theme-footer-bg) !important; color: var(--theme-footer-text) !important; border-top: 1px solid var(--theme-card-border) !important;}
 .system-logo { max-width: <?php echo htmlspecialchars($system_theme['logo_width']); ?> !important; height: auto; }
 .system-logo-img { content: url('<?php echo SITE_URL . "/" . $system_theme['logo_path']; ?>') !important; }
 </style>

@@ -123,8 +123,8 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     <i class="fas fa-file-excel"></i> Excel
                 </a>
                 
-                <a href="#" onclick="return handleExportDiplomas(event);" class="btn btn-warning fw-bold" target="_blank">
-                    <i class="fas fa-file-pdf"></i> Eksportuoti visus diplomus
+                <a href="#" onclick="return handleExportDiplomas(event);" class="btn btn-warning fw-bold">
+                    <i class="fas fa-file-pdf"></i> Eksportuoti pasirinktus diplomus
                 </a>
             </div>
         </form>
@@ -169,26 +169,26 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 
 <script type="text/javascript">
 function handleExportDiplomas(event) {
-    // Gauname esamas reikšmes iš select laukelių
     var olySelect = document.querySelector('select[name="olympiad"]').value;
     var schoolSelect = document.querySelector('select[name="school"]').value;
 
-    // Jei nepasirinkta nei olimpiada, nei mokykla - blokuojame eksportą
     if (olySelect.trim() === '' && schoolSelect.trim() === '') {
-        event.preventDefault(); // Sustabdo nuorodos atidarymą
+        event.preventDefault();
         alert('Prašome išskleidžiamajame meniu pasirinkti Olimpiadą arba Mokyklą, kad galėtumėte masiškai eksportuoti diplomus.');
         return false;
     }
 
-    // Jei pasirinkta, sukonstruojame URL ir perduodame abu galimus parametrus
     var url = 'export_diplomas.php?';
     var params = [];
-    if (olySelect.trim() !== '') params.push('olympiad=' + encodeURIComponent(olySelect));
+    
+    // IŠTAISYTA: Siunčiame parametrą "konkursas", kurio tikisi export_diplomas.php
+    if (olySelect.trim() !== '') params.push('konkursas=' + encodeURIComponent(olySelect));
     if (schoolSelect.trim() !== '') params.push('school=' + encodeURIComponent(schoolSelect));
     
-    // Priskiriame tikrąją nuorodą elementui prieš jam atsidarant
-    event.currentTarget.href = url + params.join('&');
-    return true;
+    // Atidarome naujame lange
+    window.open(url + params.join('&'), '_blank');
+    event.preventDefault();
+    return false;
 }
 </script>
 

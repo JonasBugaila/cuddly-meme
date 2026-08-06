@@ -4,8 +4,6 @@
  * Šis failas yra įkraunamas per footer.php ir veikia visuose puslapiuose kaip modalinis langas.
  */
 
-// Jei failas bandomas atidaryti tiesiogiai per URL (o ne įtrauktas per footer.php),
-// nukreipiame į pagrindinį puslapį, nes kalendorius dabar yra iššokantis langas.
 if (basename($_SERVER['PHP_SELF']) === 'kalendorius.php') {
     require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
     header("Location: " . SITE_URL);
@@ -45,7 +43,7 @@ $is_admin_global = function_exists('is_admin') && is_admin();
             <div class="modal-body p-4 bg-light">
                 <div class="d-flex gap-3 mb-3 justify-content-end">
                     <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1"><i class="fas fa-circle small me-1"></i> Būsimos / Vyksta</span>
-                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1"><i class="fas fa-archive small me-1"></i> Įvykusios</span>
+                    <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25 px-2 py-1"><i class="fas fa-archive small me-1"></i> Buvusios / Įvykusios</span>
                 </div>
                 <div id="globalCalendarView" class="bg-white p-3 rounded shadow-sm border"></div>
             </div>
@@ -105,13 +103,11 @@ document.addEventListener('DOMContentLoaded', function() {
     var globalCalendar = null;
     var globalModalEl = document.getElementById('globalCalendarModal');
 
-    // Išmanus visų "Kalendorius" mygtukų gaudymas bet kuriame puslapyje
     document.querySelectorAll('a, button').forEach(function(el) {
         var text = el.textContent.toLowerCase();
         var href = el.href ? el.href.toLowerCase() : '';
         if (text.includes('kalendorius') || href.includes('kalendorius')) {
             el.addEventListener('click', function(e) {
-                // Jei elementas dar neturi bootstrap toggle atributo
                 if (!el.hasAttribute('data-bs-toggle')) {
                     e.preventDefault();
                     var bsModal = new bootstrap.Modal(globalModalEl);
@@ -137,6 +133,12 @@ document.addEventListener('DOMContentLoaded', function() {
                     buttonText: { today: 'Šiandien', month: 'Kalendorius', list: 'Sąrašas' },
                     height: isMobile ? 'auto' : 650,
                     events: <?php echo json_encode($global_events, JSON_UNESCAPED_UNICODE); ?>,
+                    
+                    // IŠTAISYTA: Užvedus pelę pridedame pilną pavadinimą naršyklės "tooltip" formatu
+                    eventDidMount: function(info) {
+                        info.el.setAttribute('title', info.event.title);
+                    },
+                    
                     eventClick: function(info) {
                         info.jsEvent.preventDefault();
                         
@@ -157,6 +159,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             var loggedInModal = new bootstrap.Modal(document.getElementById('globalLoggedInEventModal'));
                             loggedInModal.show();
                         <?php else: ?>
+                            document.getElementById('globalGuestActionModal');
                             document.getElementById('globalGuestModalOlympiadName').textContent = info.event.title;
                             var guestModal = new bootstrap.Modal(document.getElementById('globalGuestActionModal'));
                             guestModal.show();
@@ -173,9 +176,15 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 <style>
-/* FullCalendar stilių pagrąžinimas globaliam langui */
 .fc-theme-standard .fc-scrollgrid { border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; }
 .fc .fc-button-primary { background-color: #0d6efd; border-color: #0d6efd; text-transform: capitalize; }
 .fc .fc-button-primary:hover { background-color: #0b5ed7; border-color: #0a58ca; }
 .fc-event { padding: 2px 4px; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: 4px; border: none!important;}
+
+/* Užtikriname, kad tekstas ilguose pavadinimuose būtų skaitomas užvedus */
+.fc-event-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 </style>
