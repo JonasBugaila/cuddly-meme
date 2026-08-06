@@ -12,7 +12,7 @@ if (!is_logged_in() || !is_admin()) {
     exit;
 }
 
-// 2. FILTRAI (Privaloma apibrėžti prieš SQL)
+// 2. FILTRAI
 $olympiad = isset($_GET['olympiad']) ? sanitize_input($_GET['olympiad']) : '';
 $school = isset($_GET['school']) ? sanitize_input($_GET['school']) : '';
 
@@ -32,7 +32,7 @@ if (!empty($school)) {
 }
 $where_clause = 'WHERE ' . implode(' AND ', $where_clauses);
 
-// 3. EKSORTO LOGIKA (Turi būti čia, prieš includinant header.php)
+// 3. EKSORTO LOGIKA (Excel)
 if (isset($_GET['export']) && $_GET['export'] == 'excel') {
     $sql_export = "SELECT * FROM dalyviai d $where_clause";
     $stmt_exp = db_query($sql_export, $params, $types);
@@ -41,7 +41,6 @@ if (isset($_GET['export']) && $_GET['export'] == 'excel') {
     header("Content-Type: application/vnd.ms-excel; charset=utf-8");
     header("Content-Disposition: attachment; filename=Prizininkai_" . date('Y-m-d') . ".xls");
     
-    // Lietuviškų raidžių palaikymas Excel (BOM)
     print("\xEF\xBB\xBF");
     
     echo '<table border="1">';
@@ -71,7 +70,6 @@ $allowed_sort = ['konkurso_pav', '1_vardas', '1_pavarde', '1_klase', 'Balai', 'V
 $sort = isset($_GET['sort']) && in_array($_GET['sort'], $allowed_sort) ? $_GET['sort'] : 'konkurso_pav';
 $dir = isset($_GET['dir']) && $_GET['dir'] === 'DESC' ? 'DESC' : 'ASC';
 
-// Duomenys
 $count_sql = "SELECT COUNT(*) as total FROM dalyviai d $where_clause";
 $total_items = db_get_row(db_query($count_sql, $params, $types))['total'] ?? 0;
 
@@ -97,7 +95,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
     </div>
     <div class="card-body">
         <form method="get" class="row g-3 mb-4">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <select name="olympiad" class="form-select">
                     <option value="">Visos olimpiados</option>
                     <?php foreach ($olympiads as $o): ?>
@@ -107,7 +105,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <select name="school" class="form-select">
                     <option value="">Visos mokyklos</option>
                     <?php foreach ($schools as $s): ?>
@@ -117,11 +115,16 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     <?php endforeach; ?>
                 </select>
             </div>
-            <div class="col-md-4">
+            
+            <div class="col-md-6 d-flex flex-wrap gap-2 align-items-end">
                 <button type="submit" class="btn btn-primary"><i class="fas fa-filter"></i> Filtruoti</button>
                 <a href="winners.php" class="btn btn-secondary"><i class="fas fa-undo"></i> Atstatyti</a>
                 <a href="winners.php?<?php echo http_build_query(array_merge($_GET, ['export' => 'excel'])); ?>" class="btn btn-success">
                     <i class="fas fa-file-excel"></i> Excel
+                </a>
+                
+                <a href="#" onclick="return handleExportDiplomas(event);" class="btn btn-warning fw-bold" target="_blank">
+                    <i class="fas fa-file-pdf"></i> Eksportuoti visus diplomus
                 </a>
             </div>
         </form>
@@ -163,5 +166,30 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
         <?php render_pagination($total_items, $limit, $page); ?>
     </div>
 </div>
+
+<script type="text/javascript">
+function handleExportDiplomas(event) {
+    // Gauname esamas reikšmes iš select laukelių
+    var olySelect = document.querySelector('select[name="olympiad"]').value;
+    var schoolSelect = document.querySelector('select[name="school"]').value;
+
+    // Jei nepasirinkta nei olimpiada, nei mokykla - blokuojame eksportą
+    if (olySelect.trim() === '' && schoolSelect.trim() === '') {
+        event.preventDefault(); // Sustabdo nuorodos atidarymą
+        alert('Prašome išskleidžiamajame meniu pasirinkti Olimpiadą arba Mokyklą, kad galėtumėte masiškai eksportuoti diplomus.');
+        return false;
+    }
+
+    // Jei pasirinkta, sukonstruojame URL ir perduodame abu galimus parametrus
+    var url = 'export_diplomas.php?';
+    var params = [];
+    if (olySelect.trim() !== '') params.push('olympiad=' + encodeURIComponent(olySelect));
+    if (schoolSelect.trim() !== '') params.push('school=' + encodeURIComponent(schoolSelect));
+    
+    // Priskiriame tikrąją nuorodą elementui prieš jam atsidarant
+    event.currentTarget.href = url + params.join('&');
+    return true;
+}
+</script>
 
 <?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>
