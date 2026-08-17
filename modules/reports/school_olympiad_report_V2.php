@@ -1,7 +1,7 @@
 <?php
 /**
  * Mokyklų olimpiadų ataskaitos puslapis
- * Eksportas į CSV ir Excel (VISI įrašai), puslapiavimas tik naršyklėje
+ * Eksportas į CSV, Excel ir Spausdinimas (VISI įrašai), puslapiavimas tik naršyklėje
  */
 
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
@@ -34,7 +34,7 @@ $olympiads = $stmt ? db_get_results($stmt) : [];
 $user_data = null;
 if (!is_admin()) {
     $user_sql = "SELECT var_mokykla FROM vartotojas WHERE vart_id = ?";
-    $user_stmt = db_query($user_sql, [$_SESSION['user_id']], 's');
+    $user_stmt = db_query($user_sql, [$_SESSION['user_id']]);
     $user_data = db_get_row($user_stmt);
     if (!$user_data || empty($user_data['var_mokykla'])) {
         set_message('Jūsų mokykla nenurodyta. Susisiekite su administratoriumi.', 'error');
@@ -44,15 +44,12 @@ if (!is_admin()) {
 
 // === PARAMETRŲ PARUOŠIMAS (bendras visoms užklausoms) ===
 $params = [];
-$param_types = '';
 
 if (!is_admin()) {
     $params[] = $user_data['var_mokykla'];
-    $param_types .= 's';
 }
 if (!empty($selected_olympiad)) {
     $params[] = $selected_olympiad;
-    $param_types .= 's';
 }
 
 // === SKAIČIUOJAME BENDRĄ KIEKĮ PUSLAPIAVIMUI ===
@@ -64,13 +61,12 @@ if (!is_admin()) $where_parts[] = "m.pavadinimas = ?";
 if (!empty($selected_olympiad)) $where_parts[] = "d.konkurso_pav = ?";
 if (!empty($where_parts)) $count_sql .= " WHERE " . implode(" AND ", $where_parts);
 
-$count_stmt = db_query($count_sql, $params, $param_types);
+$count_stmt = db_query($count_sql, $params);
 $total_items = $count_stmt ? (db_get_row($count_stmt)['total'] ?? 0) : 0;
 $total_pages = max(1, ceil($total_items / $items_per_page));
 
-// === EKSPORTAS PRIEŠ RODANT PUSLAPĮ ===
+// === EKSPORTAS ===
 if ($export_csv || $export_excel) {
-    // Pagrindinė užklausa be LIMIT
     $export_sql = "
         SELECT 
             m.pavadinimas AS mokykla,
@@ -87,7 +83,7 @@ if ($export_csv || $export_excel) {
     if (!empty($where_parts)) $export_sql .= " WHERE " . implode(" AND ", $where_parts);
     $export_sql .= " ORDER BY m.pavadinimas, d.konkurso_pav, d.1_pavarde, d.1_vardas";
 
-    $stmt = db_query($export_sql, $params, $param_types);
+    $stmt = db_query($export_sql, $params);
     $results = $stmt ? db_get_results($stmt) : [];
 
     if ($export_csv) {
@@ -97,9 +93,8 @@ if ($export_csv || $export_excel) {
         header('Cache-Control: no-cache, must-revalidate');
 
         $output = fopen('php://output', 'w');
-        fwrite($output, "\xEF\xBB\xBF"); // UTF-8 BOM
+        fwrite($output, "\xEF\xBB\xBF");
 
-        // Antraštė
         fputcsv($output, [
             'Mokykla', 'Olimpiada', 'Vardas', 'Pavardė', 'Klasė',
             'Mokykla (pakartota)', 'Mokyt.1', 'Mokyt.2', 'Balai', 'Vieta'
@@ -131,7 +126,7 @@ if ($export_csv || $export_excel) {
         header('Content-Disposition: attachment; filename="' . $filename . '"');
         header('Cache-Control: no-cache, must-revalidate');
 
-        echo "\xEF\xBB\xBF"; // UTF-8 BOM
+        echo "\xEF\xBB\xBF";
         echo '<html><head><meta charset="UTF-8"></head><body>';
         echo '<table border="1">';
         echo '<tr>
@@ -159,7 +154,7 @@ if ($export_csv || $export_excel) {
     }
 }
 
-// === PAGRINDINĖ UŽKLAUSA (su LIMIT tik naršyklėje) ===
+// === PAGRINDINĖ UŽKLAUSA ===
 $sql = "
     SELECT 
         m.pavadinimas AS mokykla,
@@ -178,16 +173,13 @@ if (!empty($where_parts)) $sql .= " WHERE " . implode(" AND ", $where_parts);
 
 $sql .= " ORDER BY m.pavadinimas, d.konkurso_pav, d.1_pavarde, d.1_vardas";
 
-// Pridedame LIMIT tik jei ne spausdinimas ir ne eksportas
-if (!$print_mode && !$export_csv && !$export_excel) {
+// Pridedame LIMIT tik jei ne spausdinimas
+if (!$print_mode) {
     $offset = ($current_page - 1) * $items_per_page;
-    $sql .= " LIMIT ? OFFSET ?";
-    $params[] = $items_per_page;
-    $params[] = $offset;
-    $param_types .= 'ii';
+    $sql .= " LIMIT " . (int)$items_per_page . " OFFSET " . (int)$offset;
 }
 
-$stmt = db_query($sql, $params, $param_types);
+$stmt = db_query($sql, $params);
 $results = $stmt ? db_get_results($stmt) : [];
 
 // Grupavimas
@@ -200,31 +192,77 @@ foreach ($results as $row) {
     }
 }
 
-// Įtraukiame antraštę
+// === SPAUSDINIMAS ===
+if ($print_mode && !empty($grouped_data)) {
+    header('Content-Type: text/html; charset=UTF-8');
+    
+    // Paruošiame minimalų HTML karkasą spausdinimui
+    echo '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';
+    echo '<style>body{font-family:Arial,sans-serif;} .page-break{page-break-after:always; margin-bottom:30px;}</style>';
+    echo '</head><body>';
+    
+    foreach ($grouped_data as $mokykla => $olimpiados) {
+        foreach ($olimpiados as $olimpiada => $dalyviai) {
+            $headers = ['Eil.', 'Vardas', 'Pavardė', 'Klasė', 'Mokykla', 'Mokytojai', 'Balai', 'Vieta'];
+            $data = [];
+            $i = 1;
+            foreach ($dalyviai as $d) {
+                // Sujungiame abu mokytojus į vieną langelį, kad sutaupytume vietos
+                $mokytojai = trim(htmlspecialchars($d['1_mok'] ?? ''));
+                if (!empty($d['2_mok'])) {
+                    $mokytojai .= ' / ' . htmlspecialchars($d['2_mok']);
+                }
+                if (empty($mokytojai)) $mokytojai = '-';
+
+                $data[] = [
+                    $i++,
+                    htmlspecialchars($d['1_vardas'] ?? ''),
+                    htmlspecialchars($d['1_pavarde'] ?? ''),
+                    htmlspecialchars($d['1_klase'] ?? '-'),
+                    htmlspecialchars($d['var_mokykla'] ?? ''),
+                    $mokytojai,
+                    htmlspecialchars($d['Balai'] ?? '-'),
+                    htmlspecialchars($d['Vieta'] ?? '-')
+                ];
+            }
+            echo '<div class="page-break">';
+            echo generate_printable_table($mokykla, $olimpiada, $headers, $data, ['include_back_button' => false], 'results');
+            echo '</div>';
+        }
+    }
+    
+    // Automatiškai iššaukia spausdinimo langą
+    echo '<script>window.onload = function() { window.print(); }</script>';
+    echo '</body></html>';
+    exit;
+}
+
+// Įtraukiame antraštę naršyklės vaizdui
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 ?>
 
-<div class="container mt-4">
+<div class="container mt-4 mb-5">
     <div class="row">
         <div class="col-12">
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h1><?php echo $page_title; ?></h1>
-                    <div>
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+                    <h1 class="h4 mb-0"><i class="fas fa-chart-bar"></i> <?php echo $page_title; ?></h1>
+                    <div class="d-flex gap-2">
                         <?php if (!empty($grouped_data)): ?>
-                            <a href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&export=csv" class="btn btn-success">CSV</a>
-                            <a href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&export=excel" class="btn btn-info text-white">Excel</a>
-                            <a href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&print=1" class="btn btn-primary" target="_blank">Spausdinti</a>
+                            <a href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&export=csv" class="btn btn-sm btn-success shadow-sm"><i class="fas fa-file-csv"></i> CSV</a>
+                            <a href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&export=excel" class="btn btn-sm btn-info text-white shadow-sm"><i class="fas fa-file-excel"></i> Excel</a>
+                            <a href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&print=1" class="btn btn-sm btn-light text-dark fw-bold shadow-sm" target="_blank"><i class="fas fa-print"></i> Spausdinti</a>
                         <?php endif; ?>
-                        <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" class="btn btn-secondary">Grįžti</a>
+                        <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" class="btn btn-sm btn-secondary shadow-sm"><i class="fas fa-arrow-left"></i> Grįžti</a>
                     </div>
                 </div>
-                <div class="card-body">
-                    <form method="get" class="mb-4">
-                        <div class="row">
+                <div class="card-body bg-light">
+                    <form method="get" class="mb-4 bg-white p-3 border rounded shadow-sm">
+                        <div class="row g-3">
                             <div class="col-md-6">
-                                <select name="olympiad" class="form-control">
-                                    <option value="">Visos olimpiados</option>
+                                <label class="form-label small fw-bold text-muted mb-1">Pasirinkite olimpiadą</label>
+                                <select name="olympiad" class="form-select shadow-sm border-primary">
+                                    <option value="">-- Visos olimpiados --</option>
                                     <?php foreach ($olympiads as $o): ?>
                                         <option value="<?php echo htmlspecialchars($o['konkurso_pav']); ?>" <?php echo $selected_olympiad === $o['konkurso_pav'] ? 'selected' : ''; ?>>
                                             <?php echo htmlspecialchars($o['konkurso_pav']); ?>
@@ -233,7 +271,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 </select>
                             </div>
                             <div class="col-md-4 d-flex align-items-end">
-                                <button type="submit" class="btn btn-primary">Filtruoti</button>
+                                <button type="submit" class="btn btn-primary px-4 shadow-sm"><i class="fas fa-filter"></i> Filtruoti</button>
                             </div>
                         </div>
                     </form>
@@ -241,29 +279,44 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     <!-- Duomenys -->
                     <?php if (!empty($grouped_data)): ?>
                         <?php foreach ($grouped_data as $mokykla => $olimpiados): ?>
-                            <div class="mb-4">
-                                <h3><?php echo htmlspecialchars($mokykla); ?></h3>
+                            <div class="mb-5 bg-white p-4 border rounded shadow-sm">
+                                <h3 class="mb-3 text-primary border-bottom pb-2"><i class="fas fa-school"></i> <?php echo htmlspecialchars($mokykla); ?></h3>
                                 <?php foreach ($olimpiados as $olimpiada => $dalyviai): ?>
-                                    <h4><?php echo htmlspecialchars($olimpiada); ?></h4>
+                                    <h5 class="mb-3 text-dark fw-bold mt-4"><?php echo htmlspecialchars($olimpiada); ?></h5>
                                     <div class="table-responsive">
-                                        <table class="table table-striped">
-                                            <thead><tr>
-                                                <th>Eil.</th><th>Vardas</th><th>Pavardė</th><th>Klasė</th>
-                                                <th>Mokykla</th><th>Mokyt.1</th><th>Mokyt.2</th><th>Balai</th><th>Vieta</th>
-                                            </tr></thead>
+                                        <table class="table table-striped table-hover border align-middle table-sm">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Eil.</th>
+                                                    <th>Vardas</th>
+                                                    <th>Pavardė</th>
+                                                    <th>Klasė</th>
+                                                    <th>Mokykla</th>
+                                                    <th>Mokyt.1</th>
+                                                    <th>Mokyt.2</th>
+                                                    <th>Balai</th>
+                                                    <th>Vieta</th>
+                                                </tr>
+                                            </thead>
                                             <tbody>
                                                 <?php $i = 1 + ($current_page - 1) * $items_per_page; ?>
                                                 <?php foreach ($dalyviai as $d): ?>
                                                     <tr>
-                                                        <td><?php echo $i++; ?></td>
-                                                        <td><?php echo htmlspecialchars($d['1_vardas']); ?></td>
-                                                        <td><?php echo htmlspecialchars($d['1_pavarde']); ?></td>
+                                                        <td class="text-muted"><?php echo $i++; ?></td>
+                                                        <td><?php echo htmlspecialchars($d['1_vardas'] ?? ''); ?></td>
+                                                        <td><strong><?php echo htmlspecialchars($d['1_pavarde'] ?? ''); ?></strong></td>
                                                         <td><?php echo htmlspecialchars($d['1_klase'] ?? '-'); ?></td>
-                                                        <td><?php echo htmlspecialchars($d['var_mokykla']); ?></td>
+                                                        <td><?php echo htmlspecialchars($d['var_mokykla'] ?? ''); ?></td>
                                                         <td><?php echo htmlspecialchars($d['1_mok'] ?? '-'); ?></td>
                                                         <td><?php echo htmlspecialchars($d['2_mok'] ?? '-'); ?></td>
-                                                        <td><?php echo htmlspecialchars($d['Balai'] ?? '-'); ?></td>
-                                                        <td><?php echo htmlspecialchars($d['Vieta'] ?? '-'); ?></td>
+                                                        <td><span class="badge bg-secondary"><?php echo htmlspecialchars($d['Balai'] ?? '-'); ?></span></td>
+                                                        <td>
+                                                            <?php if (!empty($d['Vieta'])): ?>
+                                                                <span class="badge bg-primary"><?php echo htmlspecialchars($d['Vieta']); ?></span>
+                                                            <?php else: ?>
+                                                                <span class="text-muted">-</span>
+                                                            <?php endif; ?>
+                                                        </td>
                                                     </tr>
                                                 <?php endforeach; ?>
                                             </tbody>
@@ -273,18 +326,33 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                         <?php endforeach; ?>
 
-                        <!-- Puslapiavimas -->
+                        <!-- Kompaktiškas Puslapiavimas -->
                         <?php if ($total_pages > 1): ?>
-                            <nav>
-                                <ul class="pagination justify-content-center">
+                            <nav class="mt-4">
+                                <ul class="pagination justify-content-center flex-wrap shadow-sm">
                                     <li class="page-item <?php echo $current_page <= 1 ? 'disabled' : ''; ?>">
                                         <a class="page-link" href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&page=<?php echo $current_page - 1; ?>">Ankstesnis</a>
                                     </li>
-                                    <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                                        <li class="page-item <?php echo $i == $current_page ? 'active' : ''; ?>">
-                                            <a class="page-link" href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&page=<?php echo $i; ?>"><?php echo $i; ?></a>
+                                    
+                                    <?php 
+                                    $window = 2; // Kiek puslapių rodyti aplink dabartinį
+                                    for ($p = 1; $p <= $total_pages; $p++): 
+                                        // Rodome pirmą, paskutinį ir kelis aplink dabartinį
+                                        if ($p == 1 || $p == $total_pages || ($p >= $current_page - $window && $p <= $current_page + $window)):
+                                    ?>
+                                        <li class="page-item <?php echo $p == $current_page ? 'active' : ''; ?>">
+                                            <a class="page-link" href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&page=<?php echo $p; ?>"><?php echo $p; ?></a>
                                         </li>
+                                    <?php 
+                                        // Dedame daugtaškį jei yra "skylė"
+                                        elseif ($p == $current_page - $window - 1 || $p == $current_page + $window + 1): 
+                                    ?>
+                                        <li class="page-item disabled">
+                                            <span class="page-link bg-transparent border-0 text-muted px-2">...</span>
+                                        </li>
+                                    <?php endif; ?>
                                     <?php endfor; ?>
+
                                     <li class="page-item <?php echo $current_page >= $total_pages ? 'disabled' : ''; ?>">
                                         <a class="page-link" href="?olympiad=<?php echo urlencode($selected_olympiad); ?>&page=<?php echo $current_page + 1; ?>">Kitas</a>
                                     </li>
@@ -292,7 +360,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </nav>
                         <?php endif; ?>
                     <?php else: ?>
-                        <div class="alert alert-info">Nėra dalyvių pagal pasirinktus filtrus.</div>
+                        <div class="alert alert-info border-0 shadow-sm">
+                            <i class="fas fa-info-circle me-2"></i> Nėra dalyvių, atitinkančių pasirinktus filtrus.
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>

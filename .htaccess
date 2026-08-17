@@ -1,16 +1,15 @@
-# 1. Išjungiame katalogų failų sąrašų atvaizdavimą (Saugumo reikalavimas)
+# Išjungiame katalogų naršymą
 Options -Indexes
 
-# 2. Įjungiame URL perrašymo modulį
-RewriteEngine On
+# Apsauga nuo tiesioginės prieigos prie jautrių failų ir atsarginių kopijų
+<FilesMatch "\.(php\.bak|env|sql|txt|json|md|log|ini|sh|bak|backup|kopija)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
 
-# 3. Leidžiame tiesiogiai pasiekti realiai egzistuojančius failus ir katalogus
-# (Tai būtina, kad veiktų jūsų CSS, JS, paveikslėliai ir kiti "assets" failai)
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-
-# 4. Visas kitas užklausas nukreipiame į index.php
-# Nuorodos dalis po domeno perduodama į 'route' GET parametrą.
-# QSA (Query String Append) išsaugo ir kitus GET parametrus, jei tokių yra.
-# L (Last) nurodo, kad tai paskutinė perrašymo taisyklė.
-RewriteRule ^(.*)$ index.php?route=$1 [QSA,L]
+# Blokavimas konfigūracijos aplanko iš išorės
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^config/(.*)$ - [F,L]
+    RewriteRule ^vendor/(.*)$ - [F,L]
+</IfModule>

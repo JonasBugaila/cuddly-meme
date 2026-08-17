@@ -110,7 +110,18 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                             <div class="card-body">
                                 <p>Visos olimpiados su dalyvių informacija, sugrupuotą pagal mokyklas.</p>
-                                <a href="<?php echo SITE_URL; ?>/modules/reports/school_olympiad_report.php" class="btn btn-primary">Detali ataskaita</a>
+                                <a href="<?php echo SITE_URL; ?>/modules/reports/school_olympiad_report_V2.php" class="btn btn-primary">Detali ataskaita</a>
+                            </div>
+                        </div>
+                    </div>
+					<div class="col-md-4">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h3>Statistika V2</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>Visos olimpiados su dalyvių informacija, atvaizduota grafiškai.</p>
+                                <a href="<?php echo SITE_URL; ?>/modules/reports/school_statistics_charts.php" class="btn btn-primary">Statistika V2</a>
                             </div>
                         </div>
                     </div>
