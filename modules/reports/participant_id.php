@@ -71,12 +71,12 @@ if ($print_mode) {
     // Gauname įstaigos pavadinimą
     $institution = 'Švietimo pagalbos tarnyba';
     
-    // Spausdiname lentelę
+   // Spausdiname lentelę
     echo generate_printable_table($title, $institution, $headers, $data, [
         'signature_text' => 'Atsakingo asmens parašas',
         'signature_name' => '',
         'include_back_button' => true
-    ]);
+    ], 'codes');
     
     exit;
 }

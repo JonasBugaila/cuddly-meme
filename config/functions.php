@@ -21,7 +21,11 @@ function verify_password($password, $hash) {
 
 function start_session() {
     if (session_status() == PHP_SESSION_NONE) {
-        session_name(SESSION_NAME);
+        if (defined('SESSION_NAME')) {
+            session_name(SESSION_NAME);
+        }
+        ini_set('session.cookie_httponly', 1);
+        ini_set('session.use_only_cookies', 1);
         session_start();
     }
 }
@@ -114,14 +118,29 @@ function has_all_keys($array, $keys) {
     return true;
 }
 
-function generate_printable_table($title, $institution, $headers, $data, $options = []) {
-    // Naudojame dirname atsižvelgiant į tai, kad functions.php yra config aplanke
+/**
+ * =====================================================================
+ * SPAUSDINIMAS
+ * =====================================================================
+ */
+function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
     $layout_file = dirname(dirname(__FILE__)) . '/config/print_layout.json';
+    $all_layouts = [];
+    
     if (file_exists($layout_file)) {
-        $layout = json_decode(file_get_contents($layout_file), true);
-    } else {
-        $layout = ['header_html' => '<h3>{{INSTITUTION}}</h3><h4>{{TITLE}}</h4>', 'footer_html' => '', 'margin_t'=>20, 'margin_b'=>20, 'margin_l'=>20, 'margin_r'=>20, 'font_size'=>12];
+        $all_layouts = json_decode(file_get_contents($layout_file), true) ?: [];
     }
+    
+    if (isset($all_layouts['header_html']) && !isset($all_layouts['protocol'])) {
+        $old_layout = $all_layouts;
+        $all_layouts = ['protocol' => $old_layout, 'evaluation' => $old_layout, 'codes' => $old_layout, 'signature' => $old_layout];
+    }
+
+    $layout = $all_layouts[$layout_key] ?? ($all_layouts['protocol'] ?? [
+        'header_html' => '<div style="text-align: center; margin-bottom: 20px;"><h3>{{INSTITUTION}}</h3><h4 style="color: #444;">{{TITLE}}</h4></div>', 
+        'footer_html' => '', 
+        'margin_t' => 20, 'margin_b' => 20, 'margin_l' => 20, 'margin_r' => 20, 'font_size' => 12
+    ]);
     
     $search = ['{{TITLE}}', '{{INSTITUTION}}', '{{DATE}}'];
     $replace = [htmlspecialchars($title), htmlspecialchars($institution), date('Y-m-d')];
@@ -129,16 +148,43 @@ function generate_printable_table($title, $institution, $headers, $data, $option
     $header_html = str_replace($search, $replace, $layout['header_html'] ?? '');
     $footer_html = str_replace($search, $replace, $layout['footer_html'] ?? '');
     
+    $html = '';
+    
+    static $base_injected = false;
+    if (!$base_injected) {
+        $html .= '<script>
+            document.addEventListener("DOMContentLoaded", function() {
+                // Truputis laiko dokumentui užsikrauti
+                setTimeout(function() {
+                    window.print();
+                }, 400);
+                
+                // Atšaukus ar atspausdinus visada grįšime atgal (toje pačioje kortelėje)
+                window.onafterprint = function() {
+                    setTimeout(function() {
+                        if (window.history.length > 1) {
+                            window.history.back();
+                        } else {
+                            window.close(); // Atsarginis variantas
+                        }
+                    }, 100);
+                };
+            });
+        </script>';
+
+        $html .= '<div class="screen-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f8f9fc; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; font-family: sans-serif;">';
+        $html .= '<div style="margin-bottom: 20px;"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4e73df" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg></div>';
+        $html .= '<h2 style="color: #333; margin: 0; font-size: 24px;">Ruošiamas spausdinimo langas...</h2>';
+        $html .= '<p style="color: #6c757d; margin-top: 10px;">Tuoj atsidarys peržiūra.</p>';
+        $html .= '<div style="margin-top: 25px; display: flex; gap: 10px;">';
+        $html .= '<button onclick="window.history.back()" style="padding: 10px 20px; background: #e74a3b; color: white; border: none; border-radius: 4px; cursor: pointer;">Atšaukti ir grįžti</button>';
+        $html .= '</div>';
+        $html .= '</div>';
+        
+        $base_injected = true;
+    }
+    
     $print_id = 'print_' . uniqid();
-    $html = '<div id="' . $print_id . '_container" class="bg-white p-4 shadow-sm rounded mb-4">';
-    
-    $html .= '<div class="d-print-none mb-4 pb-3 border-bottom d-flex justify-content-between">';
-    $html .= '<div><button onclick="window.print();" class="btn btn-primary btn-lg me-2"><i class="fas fa-print"></i> Spausdinti ataskaitą</button>';
-    
-    // IŠTAISYTA: Išmanus mygtukas, kuris arba grįžta atgal, arba uždaro langą, jei jis buvo atidarytas naujame skirtuke
-    $html .= '<button onclick="if(window.opener !== null || window.history.length <= 1) { window.close(); } else { window.history.back(); }" class="btn btn-secondary btn-lg"><i class="fas fa-arrow-left"></i> Grįžti / Užverti</button></div>';
-    
-    $html .= '</div>';
     
     $html .= '<div id="' . $print_id . '_printable" class="print-wrapper" style="counter-reset: page 0;">';
     $html .= '<div class="print-header">' . $header_html . '</div>';
@@ -158,25 +204,39 @@ function generate_printable_table($title, $institution, $headers, $data, $option
     }
     $html .= '</tbody></table>';
     
-    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html . '</div>';
-    $html .= '</div></div>';
+    $footer_extra = '';
+    if (isset($layout['show_page_num']) && $layout['show_page_num'] == 1) {
+        $footer_extra = '<div class="page-number" style="text-align: right; margin-top: 15px; font-size: 10pt; color: #666;"></div>';
+    }
+    
+    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html . $footer_extra . '</div>';
+    $html .= '</div>'; 
     
     $html .= '<style>
-        table.print-table { border-collapse: collapse; margin-bottom: 20px; }
+        table.print-table { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
         table.print-table th, table.print-table td { border: 1px solid #222; padding: 6px 8px; }
         
+        @media screen {
+            .print-wrapper { 
+                position: absolute; left: -9999px; top: -9999px; visibility: hidden;
+            }
+        }
+        
         @media print {
+            .screen-loader { display: none !important; }
+            .print-wrapper {
+                position: static; left: auto; top: auto; visibility: visible; display: block;
+            }
             body { 
-                background: #fff !important; 
-                padding: 0 !important;
+                background: #fff !important; padding: 0 !important;
                 font-family: "Times New Roman", Times, serif;
                 font-size: ' . (int)($layout['font_size'] ?? 12) . 'pt !important; 
             }
             @page { 
                 margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)($layout['margin_r'] ?? 20) . 'mm ' . (int)($layout['margin_b'] ?? 20) . 'mm ' . (int)($layout['margin_l'] ?? 20) . 'mm; 
             }
-            .d-print-none { display: none !important; }
-            .bg-white { box-shadow: none !important; padding: 0 !important; }
+            .print-wrapper { counter-reset: page; }
+            .page-number:after { content: "Puslapis " counter(page); counter-increment: page; }
         }
     </style>';
     
@@ -184,10 +244,10 @@ function generate_printable_table($title, $institution, $headers, $data, $option
 }
 
 function get_konkursai_events() {
+    if (!function_exists('db_connect')) { return []; }
     $conn = db_connect();
     $result = $conn->query("
-        SELECT 
-            konk_id, konkurso_pav, COALESCE(data, NULL) AS data, status, grupe
+        SELECT konk_id, konkurso_pav, COALESCE(data, NULL) AS data, status, grupe
         FROM konkursai ORDER BY data ASC, konk_id ASC
     ");
     if (!$result) { return []; }
@@ -195,13 +255,15 @@ function get_konkursai_events() {
     while ($row = $result->fetch_assoc()) {
         $is_active = ($row['status'] ?? 1) == 0;
         $has_date = !empty($row['data']) && $row['data'] !== '0000-00-00';
+        $site_url = defined('SITE_URL') ? SITE_URL : '';
+        
         $event = [
             'id' => $row['konk_id'],
             'title' => ($row['konkurso_pav'] ?? 'Be pavadinimo') . ' (' . ($row['grupe'] ?? 'Nėra grupės') . ')',
             'backgroundColor' => $is_active ? '#28a745' : '#6c757d',
             'borderColor' => $is_active ? '#20c997' : '#495057',
             'textColor' => 'white',
-            'url' => SITE_URL . '/modules/olympiads/view.php?id=' . $row['konk_id']
+            'url' => $site_url . '/modules/olympiads/view.php?id=' . $row['konk_id']
         ];
         if ($has_date) {
             $event['start'] = $row['data'];
@@ -263,14 +325,10 @@ function log_action($action, $details = '') {
         'details' => sanitize_input($details),
         'ip_address' => sanitize_input($ip_address)
     ];
-    db_insert('system_logs', $data);
+    if (function_exists('db_insert')) {
+        db_insert('system_logs', $data);
+    }
 }
-
-/**
- * =====================================================================
- * PUSLAPIAVIMO IR RIKIAVIMO (PAGINATION & SORTING) PAGALBINĖS FUNKCIJOS
- * =====================================================================
- */
 
 function build_url_with_params($new_params) {
     $query_params = $_GET;
@@ -358,58 +416,21 @@ function get_print_layout() {
     return [
         'header_html' => '<div style="text-align: center; margin-bottom: 20px;"><h3 style="margin-bottom: 5px;">{{INSTITUTION}}</h3><h4 style="color: #444;">{{TITLE}}</h4></div>',
         'footer_html' => '<div style="margin-top: 50px; display: flex; justify-content: space-between;"><p><strong>Komisijos pirmininkas:</strong> ___________________</p><p><strong>Data:</strong> ' . date('Y-m-d') . '</p></div>',
-        'margin_t' => 20,
-        'margin_b' => 20,
-        'margin_l' => 20,
-        'margin_r' => 20,
-        'font_size' => 12
+        'margin_t' => 20, 'margin_b' => 20, 'margin_l' => 20, 'margin_r' => 20, 'font_size' => 12
     ];
 }
-/**
- * Gauna pilnus sistemos dizaino (temos) nustatymus iš JSON failo
- */
+
 function get_system_theme() {
     $theme_file = dirname(dirname(__FILE__)) . '/config/theme.json';
-    
-    // Maksimaliai išplėstas sistemos elementų sąrašas
     $default_theme = [
-        // Bazinės spalvos
-        'primary_color'       => '#4e73df',
-        'secondary_color'     => '#858796',
-        'success_color'       => '#1cc88a',
-        'info_color'          => '#36b9cc',
-        'warning_color'       => '#f6c23e',
-        'danger_color'        => '#e74a3b',
-        
-        // Bendras fonas ir tekstas
-        'body_bg'             => '#f8f9fc',
-        'text_color'          => '#5a5c69',
-        
-        // Viršutinė juosta (Topbar)
-        'topbar_bg'           => '#ffffff',
-        'topbar_text'         => '#858796',
-        'topbar_hover'        => '#4e73df',
-        
-        // Šoninis meniu (Sidebar)
-        'sidebar_bg'          => '#4e73df',
-        'sidebar_text'        => '#ffffff',
-        'sidebar_hover_bg'    => '#2e59d9',
-        'sidebar_active_bg'   => '#ffffff',
-        'sidebar_active_text' => '#4e73df',
-        
-        // Kortelės ir Lentelės (Cards & Tables)
-        'card_bg'             => '#ffffff',
-        'card_header_bg'      => '#f8f9fc',
-        'card_border'         => '#e3e6f0',
-        'table_header_bg'     => '#f8f9fc',
-        'table_header_text'   => '#5a5c69',
-        
-        // Poraštė (Footer)
-        'footer_bg'           => '#ffffff',
-        'footer_text'         => '#858796',
-        
-        // Logotipas
-        'logo_path'           => 'assets/img/logo.png',
+        'primary_color'       => '#4e73df', 'secondary_color'     => '#858796', 'success_color'       => '#1cc88a',
+        'info_color'          => '#36b9cc', 'warning_color'       => '#f6c23e', 'danger_color'        => '#e74a3b',
+        'body_bg'             => '#f8f9fc', 'text_color'          => '#5a5c69', 'topbar_bg'           => '#ffffff',
+        'topbar_text'         => '#858796', 'topbar_hover'        => '#4e73df', 'sidebar_bg'          => '#4e73df',
+        'sidebar_text'        => '#ffffff', 'sidebar_hover_bg'    => '#2e59d9', 'sidebar_active_bg'   => '#ffffff',
+        'sidebar_active_text' => '#4e73df', 'card_bg'             => '#ffffff', 'card_header_bg'      => '#f8f9fc',
+        'card_border'         => '#e3e6f0', 'table_header_bg'     => '#f8f9fc', 'table_header_text'   => '#5a5c69',
+        'footer_bg'           => '#ffffff', 'footer_text'         => '#858796', 'logo_path'           => 'assets/img/logo.png',
         'logo_width'          => '150px'
     ];
 
@@ -421,3 +442,11 @@ function get_system_theme() {
     }
     return $default_theme;
 }
+
+if (!function_exists('esc')) {
+    function esc($string) {
+        if (empty($string)) return '';
+        return htmlspecialchars((string)$string, ENT_QUOTES, 'UTF-8');
+    }
+}
+?>

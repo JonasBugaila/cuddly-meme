@@ -1,0 +1,9 @@
+# Išjungiame failų sąrašų atvaizdavimą šiame kataloge
+Options -Indexes
+
+# Draudžiame tiesioginę prieigą prie bet kokio PHP failo šiame kataloge.
+# Visi failai vis dar galės būti pasiekiami iš serverio pusės naudojant PHP 'require' ar 'include',
+# tačiau tiesioginis atidarymas per naršyklę grąžins 403 Forbidden klaidą.
+<Files "*.php">
+    Require all denied
+</Files>

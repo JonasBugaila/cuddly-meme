@@ -19,7 +19,7 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
 
 // Rikiavimo nustatymai
-$allowed_sort = ['1_vardas', '1_pavarde', '1_klase', 'konkurso_pav', 'var_mokykla', 'Vieta'];
+$allowed_sort = ['1_vardas', '1_pavarde', '1_klase', 'konkurso_pav', 'var_mokykla', 'Vieta', 'kitas_etapas'];
 $sort = isset($_GET['sort']) && in_array($_GET['sort'], $allowed_sort) ? $_GET['sort'] : '1_pavarde';
 $dir = isset($_GET['dir']) && $_GET['dir'] === 'DESC' ? 'DESC' : 'ASC';
 
@@ -80,14 +80,25 @@ $where_sql = implode(' AND ', $where_clauses);
 // 3. DUOMENŲ BAZĖS UŽKLAUSOS KIEKIUI IR SĄRAŠUI
 $total_items = db_get_row(db_query("SELECT COUNT(*) as total FROM dalyviai d WHERE $where_sql", $params, $types))['total'] ?? 0;
 
-$sql = "SELECT d.*, m.pavadinimas AS mokykla_pilna 
+// PRIDĖTAS JOIN SU KONKURSAIS: Ištraukiame ar olimpiada yra ŠMSM patvirtinta
+$sql = "SELECT d.*, m.pavadinimas AS mokykla_pilna, k.smsm_patvirtintas 
         FROM dalyviai d 
         LEFT JOIN mokyklos m ON d.var_mokykla = m.pavadinimas 
+        LEFT JOIN konkursai k ON d.konkurso_pav = k.konkurso_pav
         WHERE $where_sql 
         ORDER BY d.$sort $dir 
         LIMIT ?, ?";
 $stmt = db_query($sql, array_merge($params, [$offset, $limit]), $types . 'ii');
 $participants = $stmt ? db_get_results($stmt) : [];
+
+// Patikriname, ar bent vienas įrašas sąraše priklauso ŠMSM olimpiadai
+$show_smsm_column = false;
+foreach ($participants as $p) {
+    if (isset($p['smsm_patvirtintas']) && $p['smsm_patvirtintas'] == 1) {
+        $show_smsm_column = true;
+        break;
+    }
+}
 
 // 4. DUOMENYS FILTRŲ SĄRAŠAMS GENERUOTI
 $olympiads_list = db_get_results(db_query("SELECT DISTINCT konkurso_pav FROM konkursai ORDER BY konkurso_pav ASC"));
@@ -186,24 +197,28 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <th><?php echo generate_sortable_header('konkurso_pav', 'Olimpiada / Konkursas', $sort, $dir); ?></th>
                         <th><?php echo generate_sortable_header('var_mokykla', 'Mokykla', $sort, $dir); ?></th>
                         <th>Mokytojas</th>
-                        <th class="pe-3"><?php echo generate_sortable_header('Vieta', 'Rezultatas', $sort, $dir); ?></th>
+                        <th><?php echo generate_sortable_header('Vieta', 'Rezultatas', $sort, $dir); ?></th>
+                        
+                        <?php if ($show_smsm_column): ?>
+                            <th class="pe-3"><?php echo generate_sortable_header('kitas_etapas', 'Siunčiamas į kitą etapą', $sort, $dir); ?></th>
+                        <?php endif; ?>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (!empty($participants)): foreach ($participants as $p): ?>
                     <tr>
-                        <td class="ps-3"><?php echo htmlspecialchars($p['1_vardas']); ?></td>
-                        <td><strong><?php echo htmlspecialchars($p['1_pavarde']); ?></strong></td>
+                        <td class="ps-3"><?php echo htmlspecialchars($p['1_vardas'] ?? ''); ?></td>
+                        <td><strong><?php echo htmlspecialchars($p['1_pavarde'] ?? ''); ?></strong></td>
                         <td><span class="badge bg-light text-dark border px-2 py-1"><?php echo htmlspecialchars($p['1_klase'] ?: '-'); ?></span></td>
-                        <td><?php echo htmlspecialchars($p['konkurso_pav']); ?></td>
-                        <td><?php echo htmlspecialchars($p['mokykla_pilna'] ?? $p['var_mokykla']); ?></td>
+                        <td><?php echo htmlspecialchars($p['konkurso_pav'] ?? ''); ?></td>
+                        <td><?php echo htmlspecialchars($p['mokykla_pilna'] ?? $p['var_mokykla'] ?? ''); ?></td>
                         <td class="small text-muted">
                             <?php 
                             echo htmlspecialchars($p['1_mok'] ?? '-'); 
                             if (!empty($p['2_mok'])) echo ' / ' . htmlspecialchars($p['2_mok']);
                             ?>
                         </td>
-                        <td class="pe-3">
+                        <td>
                             <?php if (!empty($p['Vieta']) && in_array($p['Vieta'], ['I', 'II', 'III', 'laureat.'])): ?>
                                 <span class="badge bg-warning text-dark px-2 py-1 fw-bold shadow-sm"><i class="fas fa-medal me-1"></i> <?php echo htmlspecialchars($p['Vieta']); ?></span>
                             <?php elseif (!empty($p['Vieta'])): ?>
@@ -212,10 +227,26 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <span class="text-muted small">-</span>
                             <?php endif; ?>
                         </td>
+                        
+                        <?php if ($show_smsm_column): ?>
+                            <td class="pe-3">
+                                <?php if (($p['smsm_patvirtintas'] ?? 0) == 1): ?>
+                                    <?php if (($p['kitas_etapas'] ?? '') === 'Taip'): ?>
+                                        <span class="badge bg-success shadow-sm">Siunčiamas</span>
+                                    <?php elseif (($p['kitas_etapas'] ?? '') === 'Ne'): ?>
+                                        <span class="badge bg-danger shadow-sm">Nesiunčiamas</span>
+                                    <?php else: ?>
+                                        <span class="text-muted small">—</span>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <span class="text-muted small">—</span>
+                                <?php endif; ?>
+                            </td>
+                        <?php endif; ?>
                     </tr>
                     <?php endforeach; else: ?>
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-5">
+                            <td colspan="<?php echo $show_smsm_column ? '8' : '7'; ?>" class="text-center text-muted py-5">
                                 <i class="fas fa-search-minus fa-3x mb-3 text-light"></i><br>
                                 Nėra duomenų, atitinkančių pasirinktus filtravimo kriterijus.
                             </td>

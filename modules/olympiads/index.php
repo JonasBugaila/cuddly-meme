@@ -23,8 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_status']) && i
     redirect(build_url_with_params([]));
 }
 
-// 2. PARINKTŲ FILTRŲ APDOROJIMAS (BŪSENA)
+// 2. PARINKTŲ FILTRŲ APDOROJIMAS (BŪSENA IR ŠMSM)
 $filter_status = isset($_GET['status_filter']) ? sanitize_input($_GET['status_filter']) : 'all';
+$filter_smsm = isset($_GET['smsm_filter']) ? sanitize_input($_GET['smsm_filter']) : 'all';
 
 $where_clauses = [];
 $params = [];
@@ -34,6 +35,12 @@ if ($filter_status === 'active') {
     $where_clauses[] = "status = 0";
 } elseif ($filter_status === 'inactive') {
     $where_clauses[] = "status = 1";
+}
+
+if ($filter_smsm === 'yes') {
+    $where_clauses[] = "smsm_patvirtintas = 1";
+} elseif ($filter_smsm === 'no') {
+    $where_clauses[] = "(smsm_patvirtintas = 0 OR smsm_patvirtintas IS NULL)";
 }
 
 $where_sql = !empty($where_clauses) ? 'WHERE ' . implode(' AND ', $where_clauses) : '';
@@ -79,17 +86,21 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
     </div>
     <div class="card-body bg-light">
         <div class="row mb-3">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <strong><i class="fas fa-users text-muted"></i> Grupė/Klasės:</strong> 
                 <?php echo htmlspecialchars($selected_olympiad['grupe'] ?? 'Nenurodyta'); ?>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <strong><i class="fas fa-user-tie text-muted"></i> Atsakingas asmuo:</strong> 
                 <?php echo htmlspecialchars($selected_olympiad['atsakingas'] ?? 'Nenurodyta'); ?>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <strong><i class="fas fa-toggle-on text-muted"></i> Būsena:</strong> 
                 <?php echo (($selected_olympiad['status'] ?? 1) == 0) ? '<span class="badge bg-success">Aktyvi</span>' : '<span class="badge bg-secondary">Neaktyvi (Baigta)</span>'; ?>
+            </div>
+            <div class="col-md-3">
+                <strong><i class="fas fa-check-circle text-muted"></i> ŠMSM patvirtinimas:</strong> 
+                <?php echo (($selected_olympiad['smsm_patvirtintas'] ?? 0) == 1) ? '<span class="badge bg-info text-dark">Patvirtinta</span>' : '<span class="badge bg-light text-muted border">Nepatvirtinta</span>'; ?>
             </div>
         </div>
         
@@ -104,10 +115,11 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                 <a href="../reports/result_sheet.php?olympiad_id=<?=$selected_olympiad['konk_id']?>" class="btn btn-info text-white"><i class="fas fa-check-square"></i> Suvesti rezultatus</a>
             <?php endif; ?>
             
-            <a href="../reports/participant_id.php?olympiad=<?=urlencode($selected_olympiad['konkurso_pav'])?>" target="_blank" class="btn btn-dark"><i class="fas fa-barcode"></i> Kodų lapas</a>
-            <a href="../reports/signature_sheets.php?print_empty=1&olympiad=<?=urlencode($selected_olympiad['konkurso_pav'])?>" class="btn btn-warning"><i class="fas fa-file-signature"></i> Parašų lapas</a>
-            <a href="../reports/evaluation_sheets.php?print_empty=1&olympiad=<?=urlencode($selected_olympiad['konkurso_pav'])?>" target="_blank" class="btn btn-primary"><i class="fas fa-clipboard-list"></i> Vertinimo lapai</a>
-            <a href="../reports/protocols.php?olympiad=<?=urlencode($selected_olympiad['konkurso_pav'])?>" target="_blank" class="btn btn-secondary"><i class="fas fa-file-alt"></i> Protokolas</a>
+            <!-- PAŠALINTI Visi target="_blank" -->
+            <a href="../reports/participant_id.php?olympiad=<?=urlencode($selected_olympiad['konkurso_pav'])?>" class="btn btn-dark"><i class="fas fa-barcode"></i> Kodų lapas</a>
+            <a href="../reports/signature_sheets.php?olympiad=<?=urlencode($selected_olympiad['konkurso_pav'])?>" class="btn btn-warning"><i class="fas fa-file-signature"></i> Parašų lapas</a>
+            <a href="../reports/evaluation_sheets.php?olympiad=<?=urlencode($selected_olympiad['konkurso_pav'])?>" class="btn btn-primary"><i class="fas fa-clipboard-list"></i> Vertinimo lapai</a>
+            <a href="../reports/protocols.php?olympiad=<?=urlencode($selected_olympiad['konkurso_pav'])?>" class="btn btn-secondary"><i class="fas fa-file-alt"></i> Protokolas</a>
         </div>
     </div>
 </div>
@@ -122,27 +134,45 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
     <div class="card-body">
         <?php display_message(); ?>
         
+        <!-- FILTRAVIMO FORMA -->
         <form method="get" action="" id="filterForm" class="bg-light p-3 rounded mb-4">
             <input type="hidden" name="sort" value="<?php echo htmlspecialchars($sort); ?>">
             <input type="hidden" name="dir" value="<?php echo htmlspecialchars($dir); ?>">
             <input type="hidden" name="limit" value="<?php echo htmlspecialchars($limit); ?>">
             
-            <div class="d-flex align-items-center flex-wrap gap-4">
-                <span class="fw-bold text-secondary"><i class="fas fa-filter"></i> Rodyti olimpiadas:</span>
-                
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="status_filter" id="status_all" value="all" <?php echo $filter_status === 'all' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
-                    <label class="form-check-label fw-bold" for="status_all">Visas</label>
+            <div class="row g-3 align-items-center">
+                <!-- Būsenos filtras -->
+                <div class="col-md-6">
+                    <span class="fw-bold text-secondary d-block mb-1"><i class="fas fa-filter"></i> Būsena:</span>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="status_filter" id="status_all" value="all" <?php echo $filter_status === 'all' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
+                        <label class="form-check-label fw-bold" for="status_all">Visos</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="status_filter" id="status_active" value="active" <?php echo $filter_status === 'active' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
+                        <label class="form-check-label text-success fw-bold" for="status_active">Aktyvios</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="status_filter" id="status_inactive" value="inactive" <?php echo $filter_status === 'inactive' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
+                        <label class="form-check-label text-danger fw-bold" for="status_inactive">Neaktyvios</label>
+                    </div>
                 </div>
-                
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="status_filter" id="status_active" value="active" <?php echo $filter_status === 'active' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
-                    <label class="form-check-label text-success fw-bold" for="status_active">Tik aktyvias</label>
-                </div>
-                
-                <div class="form-check form-check-inline">
-                    <input class="form-check-input" type="radio" name="status_filter" id="status_inactive" value="inactive" <?php echo $filter_status === 'inactive' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
-                    <label class="form-check-label text-danger fw-bold" for="status_inactive">Tik neaktyvias (pasibaigusias)</label>
+
+                <!-- ŠMSM patvirtinimo filtras -->
+                <div class="col-md-6">
+                    <span class="fw-bold text-secondary d-block mb-1"><i class="fas, fa-award"></i> ŠMSM patvirtinimas:</span>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="smsm_filter" id="smsm_all" value="all" <?php echo $filter_smsm === 'all' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
+                        <label class="form-check-label fw-bold" for="smsm_all">Visi</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="smsm_filter" id="smsm_yes" value="yes" <?php echo $filter_smsm === 'yes' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
+                        <label class="form-check-label text-info fw-bold" for="smsm_yes">Tik patvirtinti</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="smsm_filter" id="smsm_no" value="no" <?php echo $filter_smsm === 'no' ? 'checked' : ''; ?> onchange="document.getElementById('filterForm').submit();">
+                        <label class="form-check-label text-muted fw-bold" for="smsm_no">Nepatvirtinti</label>
+                    </div>
                 </div>
             </div>
         </form>
@@ -155,6 +185,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <th><?php echo generate_sortable_header('grupe', 'Grupė', $sort, $dir); ?></th>
                         <th><?php echo generate_sortable_header('atsakingas', 'Atsakingas', $sort, $dir); ?></th>
                         <th>Būsena</th>
+                        <th><?php echo generate_sortable_header('smsm_patvirtintas', 'ŠMSM patvirtinimas', $sort, $dir); ?></th>
                         <?php if (is_admin()): ?><th class="text-end">Veiksmas</th><?php endif; ?>
                     </tr>
                 </thead>
@@ -170,6 +201,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <td><?php echo htmlspecialchars($oly['atsakingas']); ?></td>
                         <td>
                             <?php echo (($oly['status'] ?? 1) == 0) ? '<span class="badge bg-success">Aktyvi</span>' : '<span class="badge bg-secondary">Neaktyvi</span>'; ?>
+                        </td>
+                        <td>
+                            <?php echo (($oly['smsm_patvirtintas'] ?? 0) == 1) ? '<span class="badge bg-info text-dark">Patvirtinta</span>' : '<span class="badge bg-light text-muted border">Nepatvirtinta</span>'; ?>
                         </td>
                         <?php if (is_admin()): ?>
                         <td class="text-end">
@@ -187,7 +221,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <?php endif; ?>
                     </tr>
                     <?php endforeach; else: ?>
-                        <tr><td colspan="5" class="text-center text-muted py-4">Pagal pasirinktus filtrus jokių olimpiadų nerasta.</td></tr>
+                        <tr><td colspan="6" class="text-center text-muted py-4">Pagal pasirinktus filtrus jokių olimpiadų nerasta.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
