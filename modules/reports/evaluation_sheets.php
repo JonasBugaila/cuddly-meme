@@ -25,6 +25,11 @@ $print_mode = isset($_GET['print']) && $_GET['print'] == '1';
 $print_empty_mode = isset($_GET['print_empty']) && $_GET['print_empty'] == '1';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_results']) && is_admin()) {
+    if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
+        set_message('Netinkamas CSRF žetonas.', 'error');
+        redirect(SITE_URL . '/modules/reports/evaluation_sheets.php?olympiad=' . urlencode($selected_olympiad));
+        exit;
+    }
     if (isset($_POST['participant']) && is_array($_POST['participant'])) {
         foreach ($_POST['participant'] as $reg_id => $data) {
             $balai = isset($data['balai']) ? sanitize_input($data['balai']) : '';
@@ -135,6 +140,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     <?php if (!empty($selected_olympiad) && !empty($participants)): ?>
                         <h3 class="text-center mb-4 text-dark"><?php echo htmlspecialchars($selected_olympiad); ?></h3>
                         <form action="<?php echo SITE_URL; ?>/modules/reports/evaluation_sheets.php?olympiad=<?php echo urlencode($selected_olympiad); ?>" method="post" class="bg-white p-3 border rounded shadow-sm">
+    <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
                             <div class="table-responsive">
                                 <table class="table table-striped table-hover align-middle border">
                                     <thead class="table-light">

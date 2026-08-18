@@ -124,9 +124,10 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                     <select class="form-control" id="atsakingas" name="atsakingas" required>
                                         <option value="">Pasirinkite atsakingą asmenį</option>
                                         <?php foreach ($users as $user): ?>
-                                            <option value="<?php echo $user['var_vardas'] . ' ' . $user['var_pavarde']; ?>" <?php echo isset($_POST['atsakingas']) && $_POST['atsakingas'] == $user['var_vardas'] . ' ' . $user['var_pavarde'] ? 'selected' : ''; ?>>
-                                                <?php echo $user['var_vardas'] . ' ' . $user['var_pavarde']; ?>
-                                            </option>
+                                            <?php $full_name = $user['var_vardas'] . ' ' . $user['var_pavarde']; ?>
+<option value="<?php echo htmlspecialchars($full_name); ?>" <?php echo isset($_POST['atsakingas']) && $_POST['atsakingas'] == $full_name ? 'selected' : ''; ?>>
+    <?php echo htmlspecialchars($full_name); ?>
+</option>
                                         <?php endforeach; ?>
                                     </select>
                                     <div class="invalid-feedback">
@@ -180,9 +181,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                     <select class="form-control" id="grupe" name="grupe" required>
                                         <option value="">Pasirinkite grupę</option>
                                         <?php foreach ($groups as $group): ?>
-                                            <option value="<?php echo $group['grupe']; ?>" <?php echo isset($_POST['grupe']) && $_POST['grupe'] == $group['grupe'] ? 'selected' : ''; ?>>
-                                                <?php echo $group['grupe']; ?>
-                                            </option>
+                                            <option value="<?php echo htmlspecialchars($group['grupe']); ?>" <?php echo isset($_POST['grupe']) && $_POST['grupe'] == $group['grupe'] ? 'selected' : ''; ?>>
+    <?php echo htmlspecialchars($group['grupe']); ?>
+</option>
                                         <?php endforeach; ?>
                                     </select>
                                     <div class="invalid-feedback">

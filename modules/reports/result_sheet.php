@@ -44,6 +44,11 @@ if ($stmt) {
 
 // Rezultatų atnaujinimas
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_results']) && is_admin()) {
+    if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
+        set_message('Netinkamas CSRF žetonas.', 'error');
+        redirect(SITE_URL . '/modules/reports/result_sheet.php?olympiad_id=' . $olympiad_id);
+        exit;
+    }
     foreach ($_POST['participant'] as $reg_id => $data) {
         $balai = isset($data['balai']) ? sanitize_input($data['balai']) : '';
         $vieta = isset($data['vieta']) ? sanitize_input($data['vieta']) : '';
@@ -79,8 +84,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     <?php display_message(); ?>
                     
                     <?php if (is_admin()): ?>
-                    <form method="post" action="<?php echo SITE_URL; ?>/modules/reports/result_sheet.php?olympiad_id=<?php echo $olympiad_id; ?>" class="bg-white p-3 border rounded shadow-sm">
-                    <?php endif; ?>
+<form method="post" action="<?php echo SITE_URL; ?>/modules/reports/result_sheet.php?olympiad_id=<?php echo $olympiad_id; ?>" class="bg-white p-3 border rounded shadow-sm">
+    <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+<?php endif; ?>
                     
                         <div class="table-responsive">
                             <table class="table table-striped table-hover align-middle border">

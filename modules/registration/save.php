@@ -1,14 +1,32 @@
 <?php
 // modules/registration/save.php
 
-session_start();
-require_once '../../config/db_connect.php';
+require_once __DIR__ . '/../../config/config.php';
+require_once __DIR__ . '/../../config/db_connect.php';
+require_once __DIR__ . '/../../config/functions.php';
+
+start_session();
+
+// PRIDĖTA: autentikacijos patikra
+if (!is_logged_in()) {
+    set_message('Turite prisijungti, kad galėtumėte registruoti dalyvius', 'error');
+    redirect(SITE_URL . '/modules/auth/login.php');
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     die('Neteisingas užklausos metodas.');
 }
 
-// 1. Gauname duomenis iš formos
+// PRIDĖTA: CSRF patikra
+if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
+    set_message('Netinkamas saugumo žetonas.', 'error');
+    redirect(SITE_URL . '/modules/registration/index.php');
+    exit;
+}
+
+$conn = db_connect();
+
 $konkurso_pav = trim($_POST['konkurso_pav'] ?? '');
 $var_mokykla = trim($_POST['var_mokykla'] ?? '');
 $vardas = trim($_POST['1_vardas'] ?? '');
@@ -17,23 +35,23 @@ $klase = trim($_POST['1_klase'] ?? '');
 $mokytojas = trim($_POST['1_mok'] ?? '');
 $mok_kvali = trim($_POST['1_mok_kvali'] ?? '');
 
-// Jūsų DB reikalauja šių laukų kaip NOT NULL, todėl perduodame tuščius, jei jų nėra formoje
 $mok2 = '';
 $mok2_kvali = '';
-$vart_id = $_SESSION['vart_id'] ?? 'SISTEMA';
+// PATAISYTA: teisingas sesijos raktas
+$vart_id = $_SESSION['user_id'] ?? 'SISTEMA';
 
-// Bazinė validacija
 if (empty($konkurso_pav) || empty($var_mokykla) || empty($vardas) || empty($pavarde)) {
-    die('Klaida: Neužpildyti privalomi laukai. Grįžkite atgal ir bandykite dar kartą.');
+    set_message('Neužpildyti privalomi laukai.', 'error');
+    redirect(SITE_URL . '/modules/registration/index.php');
+    exit;
 }
 
-// 2. Saugus išsaugojimas (Prepared Statements apsaugo nuo SQL injekcijų)
 $sql = "INSERT INTO dalyviai (
             konkurso_pav, var_mokykla, pil_data, 
             1_vardas, 1_pavarde, 1_klase, 
             1_mok, 1_mok_kvali, 2_mok, 2_mok_kvali, vart_id
         ) VALUES (?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)";
-        
+
 $stmt = $conn->prepare($sql);
 
 if ($stmt) {
@@ -44,13 +62,10 @@ if ($stmt) {
     );
     $stmt->execute();
     $stmt->close();
+    set_message('Dalyvis sėkmingai užregistruotas.', 'success');
 } else {
-    die("Klaida ruošiant užklausą: " . $conn->error);
+    set_message('Klaida ruošiant užklausą.', 'error');
 }
 
-// 3. Sėkmingai išsaugojus - nukreipiame atgal į formą (PRG šablonas)
-// Jei naudojate pranešimų sistemą, galite čia priskirti $_SESSION['msg'] = '...';
-$redirect_url = $_SERVER['HTTP_REFERER'] ?? '../../index.php';
-header("Location: " . $redirect_url);
-exit;
-?>
+$redirect_url = $_SERVER['HTTP_REFERER'] ?? SITE_URL . '/modules/registration/index.php';
+redirect($redirect_url);

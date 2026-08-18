@@ -52,8 +52,9 @@ $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 if ($page < 1) $page = 1;
 $offset = ($page - 1) * $limit;
 
-$sort = isset($_GET['sort']) ? sanitize_input($_GET['sort']) : 'konk_id';
-$dir = isset($_GET['dir']) && strtoupper($_GET['dir']) === 'ASC' ? 'ASC' : 'DESC';
+$allowed_sort = ['konk_id', 'konkurso_pav', 'grupe', 'atsakingas', 'smsm_patvirtintas'];
+$sort = isset($_GET['sort']) && in_array($_GET['sort'], $allowed_sort, true) ? $_GET['sort'] : 'konk_id';
+$dir  = (isset($_GET['dir']) && strtoupper($_GET['dir']) === 'ASC') ? 'ASC' : 'DESC';
 
 // Gauname bendrą įrašų skaičių filtravimui
 $count_sql = "SELECT COUNT(*) as total FROM konkursai $where_sql";
@@ -61,7 +62,7 @@ $count_stmt = db_query($count_sql, $params, $param_types);
 $total_items = $count_stmt ? db_get_row($count_stmt)['total'] : 0;
 
 // Krauname olimpiadų sąrašą lentelei
-$sql = "SELECT * FROM konkursai $where_sql ORDER BY $sort $dir LIMIT ?, ?";
+$sql = "SELECT * FROM konkursai $where_sql ORDER BY '$sort' $dir LIMIT ?, ?";
 $stmt = db_query($sql, array_merge($params, [$offset, $limit]), $param_types . 'ii');
 $olympiads = $stmt ? db_get_results($stmt) : [];
 

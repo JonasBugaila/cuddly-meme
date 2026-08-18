@@ -3,10 +3,11 @@
  * Pagrindinis sistemos konfigūracijos failas
  */
 
-// Klaidų rodymas (Produkcijoje rekomenduojama pakeisti į 0)
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+ini_set('display_errors', 0);
+ini_set('display_startup_errors', 0);
 error_reporting(E_ALL);
+ini_set('log_errors', 1);
+ini_set('error_log', dirname(__FILE__) . '/../logs/php_errors.log');
 
 // Saugūs sesijų nustatymai
 ini_set('session.cookie_httponly', 1);

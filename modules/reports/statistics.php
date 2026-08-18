@@ -15,15 +15,16 @@ if (!is_logged_in()) {
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 25;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
-$sort = isset($_GET['sort']) ? sanitize_input($_GET['sort']) : 'pavadinimas';
-$dir = isset($_GET['dir']) && strtoupper($_GET['dir']) === 'DESC' ? 'DESC' : 'ASC';
+$allowed_sort = ['pavadinimas', 'miestas'];
+$sort = isset($_GET['sort']) && in_array($_GET['sort'], $allowed_sort, true) ? $_GET['sort'] : 'pavadinimas';
+$dir  = (isset($_GET['dir']) && strtoupper($_GET['dir']) === 'DESC') ? 'DESC' : 'ASC';
 
 // Bendras mokyklų skaičius puslapiavimui
 $count_result = db_get_row(db_query("SELECT COUNT(*) as total FROM mokyklos"));
 $total_items = $count_result['total'] ?? 0;
 
 // Mokyklų sąrašas
-$sql = "SELECT * FROM mokyklos ORDER BY $sort $dir LIMIT ?, ?";
+$sql = "SELECT * FROM mokyklos ORDER BY '$sort' $dir LIMIT ?, ?";
 $stmt = db_query($sql, [$offset, $limit], 'ii');
 $results = db_get_results($stmt);
 

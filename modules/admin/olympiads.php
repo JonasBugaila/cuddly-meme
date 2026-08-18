@@ -80,10 +80,10 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             <tbody>
                                 <?php foreach ($olympiads as $olympiad): ?>
                                     <tr>
-                                        <td><?php echo $olympiad['konk_id']; ?></td>
-                                        <td><?php echo $olympiad['konkurso_pav']; ?></td>
-                                        <td><?php echo $olympiad['atsakingas']; ?></td>
-                                        <td><?php echo $olympiad['grupe']; ?></td>
+                                        <td><?php echo (int)$olympiad['konk_id']; ?></td>
+<td><?php echo htmlspecialchars($olympiad['konkurso_pav']); ?></td>
+<td><?php echo htmlspecialchars($olympiad['atsakingas']); ?></td>
+<td><?php echo htmlspecialchars($olympiad['grupe']); ?></td>
                                         <td>
                                             <?php if ($olympiad['status'] == 0): ?>
                                                 <span class="badge bg-success">Aktyvus</span>
@@ -92,8 +92,8 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                             <?php endif; ?>
                                         </td>
                                         <td>
-                                            <a href="<?php echo SITE_URL; ?>/modules/admin/olympiad_edit.php?id=<?php echo $olympiad['konk_id']; ?>" class="btn btn-sm btn-primary">Redaguoti</a>
-                                            <a href="<?php echo SITE_URL; ?>/modules/admin/olympiads.php?delete=<?php echo $olympiad['konk_id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Ar tikrai norite pašalinti šią olimpiadą?')">Šalinti</a>
+                                            <a href="<?php echo SITE_URL; ?>/modules/admin/olympiad_edit.php?id=<?php echo (int)$olympiad['konk_id']; ?>" class="btn btn-sm btn-primary">Redaguoti</a>
+                                            <a href="<?php echo SITE_URL; ?>/modules/admin/olympiads.php?delete=<?php echo (int)$olympiad['konk_id']; ?>" class="btn btn-sm btn-danger" onclick="return confirm('Ar tikrai norite pašalinti šią olimpiadą?')">Šalinti</a>
                                         </td>
                                     </tr>
                                 <?php endforeach; ?>

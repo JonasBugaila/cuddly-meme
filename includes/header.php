@@ -191,7 +191,7 @@ footer, .footer, .sticky-footer { background-color: var(--theme-footer-bg) !impo
                 </div>
                 <div class="user-info">
                     <?php if (is_logged_in()): ?>
-                        <span>Sveiki, <?php echo $_SESSION['user_name']; ?></span>
+                        <span>Sveiki, <?php echo htmlspecialchars($_SESSION['user_name']); ?></span>
                         <a href="<?php echo SITE_URL; ?>/modules/auth/logout.php" class="btn btn-secondary">Atsijungti</a>
                     <?php else: ?>
                         <a href="<?php echo SITE_URL; ?>/modules/auth/login.php" class="btn btn-secondary">Prisijungti</a>

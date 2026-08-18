@@ -21,8 +21,9 @@ $is_smsm = (isset($olympiad['smsm_patvirtintas']) && $olympiad['smsm_patvirtinta
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 25;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
-$sort = isset($_GET['sort']) ? sanitize_input($_GET['sort']) : '1_pavarde';
-$dir = isset($_GET['dir']) && $_GET['dir'] === 'DESC' ? 'DESC' : 'ASC';
+$allowed_sort = ['1_vardas', '1_pavarde', '1_klase', 'Balai'];
+$sort = isset($_GET['sort']) && in_array($_GET['sort'], $allowed_sort, true) ? $_GET['sort'] : '1_pavarde';
+$dir  = (isset($_GET['dir']) && $_GET['dir'] === 'DESC') ? 'DESC' : 'ASC';
 
 $where = "d.konkurso_pav = ?";
 $params = [$olympiad['konkurso_pav']];
@@ -38,7 +39,7 @@ if (!is_admin()) {
 $count_sql = "SELECT COUNT(DISTINCT d.reg_id) as total FROM dalyviai d LEFT JOIN mokyklos m ON d.var_mokykla = m.pavadinimas WHERE $where";
 $total_items = db_get_row(db_query($count_sql, $params, $types))['total'] ?? 0;
 
-$order_sql = ($sort === 'Balai') ? "CAST(d.Balai AS UNSIGNED) $dir" : "$sort $dir";
+$order_sql = ($sort === 'Balai') ? "CAST(d.Balai AS UNSIGNED) $dir" : "d.`$sort` $dir";
 $sql = "SELECT d.*, MIN(m.pavadinimas) AS mokykla_pilna 
         FROM dalyviai d 
         LEFT JOIN mokyklos m ON d.var_mokykla = m.pavadinimas 

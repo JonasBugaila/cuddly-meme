@@ -1,17 +1,29 @@
 <?php
-// Nurodome tikslius kelius
 require_once __DIR__ . '/../../config/config.php'; 
 require_once __DIR__ . '/../../config/db_connect.php';
 require_once __DIR__ . '/../../config/functions.php';
 
-// Startuojame sesiją
 start_session();
+
+// PRIDĖTA: prisijungimo patikra
+if (!is_logged_in()) {
+    set_message('Turite prisijungti, kad galėtumėte registruoti dalyvius', 'error');
+    redirect(SITE_URL . '/modules/auth/login.php');
+    exit;
+}
 
 // ---------------------------------------------------------
 // 1. DUOMENŲ IŠSAUGOJIMO LOGIKA
 // ---------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])) {
-    
+
+    // PRIDĖTA: CSRF patikra
+    if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
+        set_message('Netinkamas saugumo žetonas. Bandykite dar kartą.', 'error');
+        redirect(current_url());
+        exit;
+    }
+
     $konkurso_pav = sanitize_input($_POST['konkurso_pav'] ?? '');
     $var_mokykla  = sanitize_input($_POST['var_mokykla'] ?? '');
     $vardas       = sanitize_input($_POST['1_vardas'] ?? '');
@@ -27,13 +39,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])
     $inf_2        = sanitize_input($_POST['inf_2'] ?? '');
     $pastabos     = sanitize_input($_POST['pastabos'] ?? '');
     
-    $vart_id = $_SESSION['user_id'] ?? 'SISTEMA';
+    $vart_id = $_SESSION['user_id'] ?? 'SISTEMA'; // Naudojame user_id (pagal jūsų login.php nustatymą)
 
     if (!empty($konkurso_pav) && !empty($var_mokykla) && !empty($vardas) && !empty($pavarde)) {
         $conn = db_connect();
         
         if ($conn) {
-            // Atnaujinta SQL užklausa, apimanti visus laukus
             $sql = "INSERT INTO dalyviai (
                         konkurso_pav, var_mokykla, pil_data, 
                         1_vardas, 1_pavarde, 1_klase, 
@@ -53,25 +64,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])
                 if ($stmt->execute()) {
                     set_message('Dalyvis sėkmingai užregistruotas į olimpiadą!', 'success');
                 } else {
-                    set_message('Klaida išsaugant duomenis: ' . $stmt->error, 'danger');
+                    set_message('Klaida išsaugant duomenis: ' . $stmt->error, 'error');
                 }
                 $stmt->close();
             }
         }
     } else {
-        set_message('Klaida: Neužpildyti privalomi laukai!', 'danger');
+        set_message('Klaida: Neužpildyti privalomi laukai!', 'error');
     }
     
     redirect(current_url());
 }
 
 // ---------------------------------------------------------
-// 2. KONKURSŲ SĄRAŠAS
+// 2. KONKURSŲ SĄRAŠAS FORMOS DROPDOWN'UI
 // ---------------------------------------------------------
 $konkursai = [];
 $conn = db_connect();
 if ($conn) {
-    $res = $conn->query("SELECT konkurso_pav FROM konkursai ORDER BY sukurimo_data DESC");
+    $res = $conn->query("SELECT konkurso_pav FROM konkursai WHERE status = 0 ORDER BY sukurimo_data DESC");
     if ($res) {
         while($row = $res->fetch_assoc()) {
             $konkursai[] = $row['konkurso_pav'];
@@ -79,8 +90,6 @@ if ($conn) {
     }
 }
 
-// =========================================================
-// ĮTRAUKIAME JŪSŲ SISTEMOS HEADER
 // =========================================================
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -95,10 +104,7 @@ require_once __DIR__ . '/../../includes/header.php';
 </style>
 
 <div class="container mt-4 mb-5">
-
-    <!-- Iškabina žalius/raudonus sistemos pranešimus -->
     <?php display_message(); ?>
-
     <div class="card shadow-sm border-0">
         <div class="card-header bg-primary text-white">
             <h4 class="mb-0 text-white"><i class="fas fa-user-plus"></i> Dalyvio registracija</h4>
@@ -109,15 +115,18 @@ require_once __DIR__ . '/../../includes/header.php';
                 <strong><i class="fas fa-info-circle"></i> Patarimas:</strong> Pradėkite vesti mokinio pavardę greitojoje paieškoje – jei mokinys jau dalyvavo, sistema automatiškai užpildys jo duomenis.
             </div>
 
-            <form action="" method="POST" class="bg-white p-4 border rounded">
-                
-                <!-- GREITA PAIEŠKA -->
-                <div class="form-group autocomplete-container mb-4">
+           <form action="" method="POST" class="bg-white p-4 border rounded">
+
+    <!-- PRIDĖTA -->
+    <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+
+    <!-- GREITA PAIEŠKA -->
+    <div class="form-group autocomplete-container mb-4">
                     <label for="paieska" class="font-weight-bold text-primary"><i class="fas fa-search"></i> Greita paieška istorijoje (pagal pavardę):</label>
                     <input type="text" id="paieska" class="form-control form-control-lg border-primary" placeholder="Pvz.: Jonaitis..." autocomplete="off">
                     <div id="paieskos-rezultatai"></div>
                 </div>
-
+                
                 <hr class="mb-4">
 
                 <!-- PAGRINDINĖ INFORMACIJA -->
@@ -128,14 +137,18 @@ require_once __DIR__ . '/../../includes/header.php';
                         <select name="konkurso_pav" class="form-select form-control" required>
                             <option value="">-- Pasirinkite --</option>
                             <?php foreach ($konkursai as $k_pav): ?>
-                                <option value="<?php echo esc($k_pav); ?>"><?php echo esc($k_pav); ?></option>
+                                <option value="<?php echo htmlspecialchars($k_pav); ?>"><?php echo htmlspecialchars($k_pav); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
-
                     <div class="col-md-6 form-group mb-3">
                         <label class="fw-bold">Mokykla <span class="text-danger">*</span></label>
-                        <input type="text" name="var_mokykla" id="var_mokykla" class="form-control" required>
+                        <!-- Priklausomai nuo to ar adminas, leidžiame keisti mokyklą arba užfiksuojame vartotojo mokyklą -->
+                        <?php if (is_admin()): ?>
+                            <input type="text" name="var_mokykla" id="var_mokykla" class="form-control" required>
+                        <?php else: ?>
+                            <input type="text" name="var_mokykla" id="var_mokykla" class="form-control" value="<?php echo htmlspecialchars(db_get_row(db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's'))['var_mokykla'] ?? ''); ?>" readonly required>
+                        <?php endif; ?>
                     </div>
                 </div>
 
@@ -146,12 +159,10 @@ require_once __DIR__ . '/../../includes/header.php';
                         <label class="fw-bold">Mokinio vardas <span class="text-danger">*</span></label>
                         <input type="text" name="1_vardas" id="vardas" class="form-control" required>
                     </div>
-
                     <div class="col-md-4 form-group mb-3">
                         <label class="fw-bold">Mokinio pavardė <span class="text-danger">*</span></label>
                         <input type="text" name="1_pavarde" id="pavarde" class="form-control" required>
                     </div>
-
                     <div class="col-md-4 form-group mb-3">
                         <label class="fw-bold">Klasė <span class="text-danger">*</span></label>
                         <input type="text" name="1_klase" id="klase" class="form-control" required>
@@ -204,7 +215,6 @@ require_once __DIR__ . '/../../includes/header.php';
                         <label class="fw-bold text-muted">Informacija 1 (Pvz. el. paštas)</label>
                         <input type="text" name="inf_1" id="inf_1" class="form-control">
                     </div>
-
                     <div class="col-md-6 form-group mb-3">
                         <label class="fw-bold text-muted">Informacija 2 (Pvz. telefono nr.)</label>
                         <input type="text" name="inf_2" id="inf_2" class="form-control">
@@ -235,7 +245,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const klaseInput = document.getElementById('klase');
     const mokyklaInput = document.getElementById('var_mokykla');
     const mokytojasInput = document.getElementById('mokytojas');
-    // NAUJI JS LAUKAI
     const kvalifikacijaInput = document.getElementById('kvalifikacija');
     const rezultataiDiv = document.getElementById('paieskos-rezultatai');
     
@@ -244,14 +253,12 @@ document.addEventListener('DOMContentLoaded', function() {
     paieskaInput.addEventListener('input', function() {
         clearTimeout(timeout);
         const term = this.value.trim();
-
         if (term.length < 2) {
             rezultataiDiv.style.display = 'none';
             return;
         }
 
         timeout = setTimeout(function() {
-            // Nuoroda į AJAX paiešką
             fetch('ajax_search.php?term=' + encodeURIComponent(term))
                 .then(r => r.json())
                 .then(data => {
@@ -266,7 +273,9 @@ document.addEventListener('DOMContentLoaded', function() {
                                 vardasInput.value = item.vardas;
                                 pavardeInput.value = item.pavarde;
                                 klaseInput.value = item.klase;
+                                <?php if (is_admin()): ?>
                                 mokyklaInput.value = item.mokykla;
+                                <?php endif; ?>
                                 mokytojasInput.value = item.mokytojas;
                                 
                                 paieskaInput.value = ''; 
@@ -292,9 +301,4 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
-<?php 
-// =========================================================
-// ĮTRAUKIAME JŪSŲ SISTEMOS FOOTER
-// =========================================================
-require_once __DIR__ . '/../../includes/footer.php'; 
-?>
+<?php require_once __DIR__ . '/../../includes/footer.php'; ?>

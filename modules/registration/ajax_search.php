@@ -7,7 +7,13 @@ require_once __DIR__ . '/../../config/functions.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
-// Iškviečiame prisijungimą prie duomenų bazės (jūsų sistemos funkcija)
+// PRIDĖTA: autentikacijos patikra
+if (!is_logged_in()) {
+    http_response_code(401);
+    echo json_encode(['error' => 'Prieiga negalima']);
+    exit;
+}
+
 $conn = db_connect();
 
 if (!isset($_GET['term']) || trim($_GET['term']) === '') {
@@ -16,13 +22,12 @@ if (!isset($_GET['term']) || trim($_GET['term']) === '') {
 }
 
 $term = trim($_GET['term']);
-
 if (mb_strlen($term, 'UTF-8') < 2) {
     echo json_encode([]);
     exit;
 }
 
-// Ieškome mokinio pagal pavardę jūsų 'dalyviai' lentelėje
+// Ieškome mokinio pagal pavardę 'dalyviai' lentelėje
 $sql = "SELECT DISTINCT 1_vardas, 1_pavarde, 1_klase, var_mokykla, 1_mok 
         FROM dalyviai 
         WHERE 1_pavarde LIKE ? LIMIT 10";

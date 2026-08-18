@@ -106,7 +106,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <select class="form-control" id="olympiad" name="olympiad">
                                     <option value="">Visos olimpiados</option>
                                     <?php foreach ($olympiads as $o): ?>
-                                        <option value="<?php echo $o['konkurso_pav']; ?>" <?php echo $olympiad == $o['konkurso_pav'] ? 'selected' : ''; ?>><?php echo $o['konkurso_pav']; ?></option>
+                                        <option value="<?php echo htmlspecialchars($o['konkurso_pav']); ?>" <?php echo $olympiad == $o['konkurso_pav'] ? 'selected' : ''; ?>><?php echo htmlspecialchars($o['konkurso_pav']); ?></option>
                                     <?php endforeach; ?>
                                 </select>
                             </div>
