@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])
 }
 
 // ---------------------------------------------------------
-// 2. KONKURSŲ SĄRAŠAS FORMOS DROPDOWN'UI
+// 2. KONKURSŲ IR KLASIŲ SĄRAŠAI FORMOS DROPDOWN'AMS
 // ---------------------------------------------------------
 $konkursai = [];
 $conn = db_connect();
@@ -96,6 +96,9 @@ if ($conn) {
         }
     }
 }
+
+// PRIDĖTA: klasių sąrašas pasirinkimui iš dropdown (kaip admin/participant_edit.php)
+$classes = db_get_results(db_query("SELECT klases FROM klases ORDER BY klases ASC"));
 
 // =========================================================
 require_once __DIR__ . '/../../includes/header.php';
@@ -172,7 +175,12 @@ require_once __DIR__ . '/../../includes/header.php';
                     </div>
                     <div class="col-md-4 form-group mb-3">
                         <label class="fw-bold">Klasė <span class="text-danger">*</span></label>
-                        <input type="text" name="1_klase" id="klase" class="form-control" required>
+                        <select name="1_klase" id="klase" class="form-select form-control" required>
+                            <option value="">-- Pasirinkite --</option>
+                            <?php foreach ($classes as $class): ?>
+                                <option value="<?php echo htmlspecialchars($class['klases']); ?>"><?php echo htmlspecialchars($class['klases']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
 

@@ -29,6 +29,9 @@ if (!$participant) {
     redirect(SITE_URL . '/modules/registration/my_students.php');
 }
 
+// PRIDĖTA: klasių sąrašas pasirinkimui iš dropdown (kaip admin/participant_edit.php)
+$classes = db_get_results(db_query("SELECT klases FROM klases ORDER BY klases ASC"));
+
 // SAUGU: nuosavybės patikra - paprastas vartotojas gali redaguoti TIK savo mokyklos dalyvius
 if (!is_admin()) {
     $own_school_row = db_get_row(db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's'));
@@ -135,7 +138,12 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     </div>
                     <div class="col-md-4 form-group mb-3">
                         <label class="fw-bold">Klasė <span class="text-danger">*</span></label>
-                        <input type="text" name="1_klase" class="form-control" value="<?php echo htmlspecialchars($participant['1_klase']); ?>" required>
+                        <select name="1_klase" class="form-select form-control" required>
+                            <option value="">-- Pasirinkite --</option>
+                            <?php foreach ($classes as $class): ?>
+                                <option value="<?php echo htmlspecialchars($class['klases']); ?>" <?php echo ($participant['1_klase'] === $class['klases']) ? 'selected' : ''; ?>><?php echo htmlspecialchars($class['klases']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
 

@@ -21,6 +21,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $current_theme = get_system_theme();
+
+    // Grąžinimas į numatytuosius nustatymus (atskiras submit mygtukas - apdorojame pirmiausia)
+    if (isset($_POST['reset_theme'])) {
+        if (file_exists($theme_file)) {
+            unlink($theme_file);
+        }
+        set_message('Sistemos išvaizda atkurta į numatytuosius nustatymus.', 'success');
+        redirect(current_url());
+        exit;
+    }
     
     // Visų kintamųjų sąrašas
     $colors_to_update = [
@@ -40,30 +50,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (isset($_POST['logo_width'])) {
-        $current_theme['logo_width'] = sanitize_input($_POST['logo_width']);
+        // SAUGU: leidžiame tik skaičių + px arba % (pvz. "150px", "80%"), apsaugo nuo CSS injekcijos į <style> bloką
+        $logo_width_raw = trim($_POST['logo_width']);
+        if (preg_match('/^\d{1,4}(px|%)$/', $logo_width_raw)) {
+            $current_theme['logo_width'] = $logo_width_raw;
+        } else {
+            set_message('Netinkamas logotipo pločio formatas (naudokite pvz. "150px" arba "80%"). Plotis nepakeistas.', 'warning');
+        }
     }
 
     // Logotipo įkėlimas
     if (isset($_FILES['logo_file']) && $_FILES['logo_file']['error'] === UPLOAD_ERR_OK) {
-        $allowed_types = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/webp'];
-        $file_type = mime_content_type($_FILES['logo_file']['tmp_name']);
-        
-        if (in_array($file_type, $allowed_types)) {
-            $ext = pathinfo($_FILES['logo_file']['name'], PATHINFO_EXTENSION);
-            $new_filename = 'logo_' . time() . '.' . $ext;
-            $upload_dir = dirname(dirname(dirname(__FILE__))) . '/assets/img/';
-            if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-            
-            $destination = $upload_dir . $new_filename;
-            if (move_uploaded_file($_FILES['logo_file']['tmp_name'], $destination)) {
-                $old_logo_path = dirname(dirname(dirname(__FILE__))) . '/' . $current_theme['logo_path'];
-                if (file_exists($old_logo_path) && strpos($current_theme['logo_path'], 'logo_' ) !== false) {
-                    unlink($old_logo_path);
-                }
-                $current_theme['logo_path'] = 'assets/img/' . $new_filename;
-            }
+        // SAUGU: griežtas ryšys tarp aptikto MIME tipo ir leidžiamo failo plėtinio.
+        // Plėtinys NIEKADA neimamas iš vartotojo pateikto failo pavadinimo -
+        // priešingu atveju "polyglot" failas (tikras vaizdas su pridėtu PHP kodu),
+        // pavadintas pvz. "logo.php", būtų aptiktas kaip "image/jpeg" pagal MIME
+        // ir įrašytas su .php plėtiniu į viešai pasiekiamą assets/img/ katalogą,
+        // kur serveris jį vykdytų kaip PHP skriptą (nuotolinio kodo vykdymo spraga).
+        $mime_to_ext = [
+            'image/jpeg'    => 'jpg',
+            'image/png'     => 'png',
+            'image/webp'    => 'webp',
+            'image/svg+xml' => 'svg',
+        ];
+
+        $max_file_size = 2 * 1024 * 1024; // 2 MB
+        if ($_FILES['logo_file']['size'] > $max_file_size) {
+            set_message('Logotipo failas per didelis (maks. 2 MB).', 'error');
         } else {
-            set_message('Netinkamas logotipo formatas.', 'error');
+            $tmp_path = $_FILES['logo_file']['tmp_name'];
+            $file_type = mime_content_type($tmp_path);
+            $is_valid = false;
+
+            if ($file_type === 'image/svg+xml') {
+                // SVG nėra rastrinis vaizdas, todėl getimagesize() jo nepatikrina -
+                // patikriname turinį rankiniu būdu ir pašaliname galimai pavojingus elementus.
+                $svg_content = file_get_contents($tmp_path);
+                if ($svg_content !== false && (stripos($svg_content, '<svg') !== false)) {
+                    // Pašaliname <script> blokus ir on* įvykių atributus (apsauga nuo XSS per SVG)
+                    $svg_content = preg_replace('/<script\b[^>]*>.*?<\/script>/is', '', $svg_content);
+                    $svg_content = preg_replace('/\son\w+\s*=\s*(["\']).*?\1/is', '', $svg_content);
+                    $svg_content = preg_replace('/xlink:href\s*=\s*(["\'])\s*javascript:.*?\1/is', '', $svg_content);
+                    file_put_contents($tmp_path, $svg_content);
+                    $is_valid = true;
+                }
+            } elseif (isset($mime_to_ext[$file_type])) {
+                // Rastriniams formatams papildomai patikriname per getimagesize() -
+                // apsaugo nuo failų, kurių pirmieji baitai apsimeta vaizdu, bet turinys nėra validus paveikslėlis.
+                $image_info = @getimagesize($tmp_path);
+                $is_valid = ($image_info !== false);
+            }
+
+            if ($is_valid && isset($mime_to_ext[$file_type])) {
+                $ext = $mime_to_ext[$file_type];
+                $new_filename = 'logo_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+                $upload_dir = dirname(dirname(dirname(__FILE__))) . '/assets/img/';
+                if (!is_dir($upload_dir)) mkdir($upload_dir, 0755, true);
+
+                $destination = $upload_dir . $new_filename;
+                if (move_uploaded_file($tmp_path, $destination)) {
+                    $old_logo_path = dirname(dirname(dirname(__FILE__))) . '/' . $current_theme['logo_path'];
+                    if (file_exists($old_logo_path) && strpos($current_theme['logo_path'], 'logo_') !== false) {
+                        unlink($old_logo_path);
+                    }
+                    $current_theme['logo_path'] = 'assets/img/' . $new_filename;
+                } else {
+                    set_message('Nepavyko įrašyti logotipo failo į serverį.', 'error');
+                }
+            } else {
+                set_message('Netinkamas arba sugadintas logotipo failas. Leidžiami formatai: JPG, PNG, WEBP, SVG.', 'error');
+            }
         }
     }
 
@@ -81,16 +137,38 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 
 // Pagalbinė funkcija formos laukeliams piešti
 function render_color_input($name, $label, $current_val, $col = 'col-md-6') {
+    $safe_val = htmlspecialchars($current_val);
     echo "
     <div class='{$col}'>
         <label class='form-label small fw-bold text-muted mb-1'>{$label}</label>
         <div class='d-flex align-items-center gap-2'>
-            <input type='color' class='form-control form-control-color shadow-sm border-0' name='{$name}' value='" . htmlspecialchars($current_val) . "'>
-            <code class='text-dark bg-light px-2 py-1 rounded border'>" . htmlspecialchars($current_val) . "</code>
+            <input type='color' class='form-control form-control-color shadow-sm border-0 theme-color-input' name='{$name}' id='{$name}' value='{$safe_val}' data-hex-target='{$name}_hex'>
+            <input type='text' class='form-control form-control-sm theme-hex-input' id='{$name}_hex' value='{$safe_val}' maxlength='7' pattern='^#[0-9a-fA-F]{6}$' data-color-target='{$name}' style='max-width: 100px;'>
         </div>
     </div>";
 }
 ?>
+<script>
+// Sinchronizuojame spalvos parinkiklį (color picker) su tekstiniu HEX lauku abiem kryptimis
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.theme-color-input').forEach(function(colorInput) {
+        var hexInput = document.getElementById(colorInput.dataset.hexTarget);
+        if (!hexInput) return;
+        colorInput.addEventListener('input', function() {
+            hexInput.value = colorInput.value;
+        });
+    });
+    document.querySelectorAll('.theme-hex-input').forEach(function(hexInput) {
+        var colorInput = document.getElementById(hexInput.dataset.colorTarget);
+        if (!colorInput) return;
+        hexInput.addEventListener('input', function() {
+            if (/^#[0-9a-fA-F]{6}$/.test(hexInput.value)) {
+                colorInput.value = hexInput.value;
+            }
+        });
+    });
+});
+</script>
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h3 mb-0 text-gray-800"><i class="fas fa-paint-roller text-primary me-2"></i> Sistemos dizaino valdymas</h1>
@@ -99,7 +177,7 @@ function render_color_input($name, $label, $current_val, $col = 'col-md-6') {
 
 <?php display_message(); ?>
 
-<form action="" method="post" enctype="multipart/form-data">
+<form action="" method="post" enctype="multipart/form-data" id="theme-settings-form">
     <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
 
     <div class="row g-4">
@@ -211,12 +289,14 @@ function render_color_input($name, $label, $current_val, $col = 'col-md-6') {
                     <div class="flex-grow-1 w-100">
                         <div class="row g-3">
                             <div class="col-md-8">
-                                <label class="form-label fw-bold">Įkelti naują logotipą (PNG, SVG, WEBP)</label>
+                                <label class="form-label fw-bold">Įkelti naują logotipą (PNG, JPG, SVG, WEBP)</label>
                                 <input type="file" class="form-control" name="logo_file" accept=".png,.jpg,.jpeg,.svg,.webp">
+                                <small class="text-muted d-block mt-1">Maksimalus failo dydis: 2 MB.</small>
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label fw-bold">Logotipo plotis (pvz. 150px)</label>
-                                <input type="text" class="form-control" name="logo_width" value="<?php echo htmlspecialchars($theme['logo_width']); ?>">
+                                <label class="form-label fw-bold">Logotipo plotis</label>
+                                <input type="text" class="form-control" name="logo_width" value="<?php echo htmlspecialchars($theme['logo_width']); ?>" placeholder="pvz. 150px" pattern="^\d{1,4}(px|%)$">
+                                <small class="text-muted d-block mt-1">Formatas: skaičius + "px" arba "%".</small>
                             </div>
                         </div>
                     </div>
@@ -224,12 +304,20 @@ function render_color_input($name, $label, $current_val, $col = 'col-md-6') {
             </div>
         </div>
 
-        <div class="col-12 text-end mb-5">
-            <button type="submit" class="btn btn-primary btn-lg shadow-sm px-5 fw-bold">
-                <i class="fas fa-save me-2"></i> Išsaugoti visus nustatymus
-            </button>
-        </div>
     </div>
 </form>
+
+<div class="d-flex justify-content-between align-items-center mb-5">
+    <form action="" method="post" onsubmit="return confirm('Ar tikrai norite atkurti numatytuosius sistemos dizaino nustatymus? Šis veiksmas negrąžinamas.');" class="m-0">
+        <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+        <input type="hidden" name="reset_theme" value="1">
+        <button type="submit" class="btn btn-outline-danger">
+            <i class="fas fa-undo me-2"></i> Atkurti numatytuosius
+        </button>
+    </form>
+    <button type="submit" form="theme-settings-form" class="btn btn-primary btn-lg shadow-sm px-5 fw-bold">
+        <i class="fas fa-save me-2"></i> Išsaugoti visus nustatymus
+    </button>
+</div>
 
 <?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>
