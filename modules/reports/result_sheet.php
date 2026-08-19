@@ -14,6 +14,14 @@ if (!is_logged_in()) {
     redirect(SITE_URL . '/modules/auth/login.php');
 }
 
+// SAUGU: rezultatų lentelę mato ir redaguoja tik administratorius
+if (!is_admin()) {
+    log_action('Saugumo pažeidimas', 'Bandyta pasiekti rezultatų lentelę be admin teisių.');
+    set_message('Neturite teisių peržiūrėti rezultatų.', 'error');
+    redirect(SITE_URL);
+    exit;
+}
+
 // Gauname olimpiados ID iš GET parametro
 $olympiad_id = isset($_GET['olympiad_id']) ? (int)$_GET['olympiad_id'] : 0;
 

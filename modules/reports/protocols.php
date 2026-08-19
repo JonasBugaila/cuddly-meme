@@ -16,6 +16,14 @@ if (!is_logged_in()) {
     redirect(SITE_URL . '/modules/auth/login.php');
 }
 
+// SAUGU: protokolai (rezultatai) matomi tik administratoriui
+if (!is_admin()) {
+    log_action('Saugumo pažeidimas', 'Bandyta pasiekti protokolus be admin teisių.');
+    set_message('Neturite teisių peržiūrėti rezultatų protokolų.', 'error');
+    redirect(SITE_URL);
+    exit;
+}
+
 // Gauname filtrų reikšmes
 $selected_olympiad = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['olympiad'])) {

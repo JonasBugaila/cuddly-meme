@@ -27,18 +27,34 @@ if (mb_strlen($term, 'UTF-8') < 2) {
     exit;
 }
 
-// Ieškome mokinio pagal pavardę 'dalyviai' lentelėje
-$sql = "SELECT DISTINCT 1_vardas, 1_pavarde, 1_klase, var_mokykla, 1_mok 
-        FROM dalyviai 
-        WHERE 1_pavarde LIKE ? LIMIT 10";
-        
-$stmt = $conn->prepare($sql);
+$search_param = '%' . $term . '%';
+
+// SAUGU: paprastas vartotojas (mokytojas) paieškoje mato TIK savo mokyklos mokinius.
+// Anksčiau paieška grąžindavo visų mokyklų mokinius bet kuriam prisijungusiam vartotojui.
+if (is_admin()) {
+    $sql = "SELECT DISTINCT 1_vardas, 1_pavarde, 1_klase, var_mokykla, 1_mok
+            FROM dalyviai
+            WHERE 1_pavarde LIKE ? LIMIT 10";
+    $stmt = $conn->prepare($sql);
+    if ($stmt) {
+        $stmt->bind_param("s", $search_param);
+        $stmt->execute();
+    }
+} else {
+    $own_school_row = db_get_row(db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's'));
+    $own_school = $own_school_row['var_mokykla'] ?? '';
+
+    $sql = "SELECT DISTINCT 1_vardas, 1_pavarde, 1_klase, var_mokykla, 1_mok
+            FROM dalyviai
+            WHERE 1_pavarde LIKE ? AND var_mokykla = ? LIMIT 10";
+    $stmt = $conn->prepare($sql);
+    if ($stmt) {
+        $stmt->bind_param("ss", $search_param, $own_school);
+        $stmt->execute();
+    }
+}
 
 if ($stmt) {
-    $search_param = '%' . $term . '%';
-    $stmt->bind_param("s", $search_param);
-    $stmt->execute();
-    
     $result = $stmt->get_result();
     $mokiniai = [];
     

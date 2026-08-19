@@ -5,6 +5,15 @@ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
 if (!is_logged_in()) { redirect(SITE_URL . '/modules/auth/login.php'); }
 
+// SAUGU: ši ataskaita rodo rezultatus (Vieta stulpelis), todėl matoma tik administratoriui.
+// Mokytojai savo mokyklos dalyvius (be rezultatų) mato per /modules/registration/my_students.php
+if (!is_admin()) {
+    log_action('Saugumo pažeidimas', 'Bandyta pasiekti dalyvių/rezultatų ataskaitą be admin teisių.');
+    set_message('Neturite teisių peržiūrėti šios ataskaitos.', 'error');
+    redirect(SITE_URL);
+    exit;
+}
+
 // 1. FILTRŲ REIKŠMIŲ GAVIMAS
 $f_olympiad = isset($_GET['olympiad']) ? sanitize_input($_GET['olympiad']) : '';
 $f_school   = isset($_GET['school']) ? sanitize_input($_GET['school']) : '';

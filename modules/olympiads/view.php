@@ -21,7 +21,8 @@ $is_smsm = (isset($olympiad['smsm_patvirtintas']) && $olympiad['smsm_patvirtinta
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 25;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($page - 1) * $limit;
-$allowed_sort = ['1_vardas', '1_pavarde', '1_klase', 'Balai'];
+// SAUGU: rikiavimas pagal 'Balai' (rezultatą) leidžiamas tik administratoriui
+$allowed_sort = is_admin() ? ['1_vardas', '1_pavarde', '1_klase', 'Balai'] : ['1_vardas', '1_pavarde', '1_klase'];
 $sort = isset($_GET['sort']) && in_array($_GET['sort'], $allowed_sort, true) ? $_GET['sort'] : '1_pavarde';
 $dir  = (isset($_GET['dir']) && $_GET['dir'] === 'DESC') ? 'DESC' : 'ASC';
 
@@ -107,14 +108,18 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
         <div class="d-flex flex-wrap gap-2">
             <?php if (($olympiad['status'] ?? 1) == 0): ?>
                 <a href="../registration/register.php?olympiad_id=<?=$olympiad['konk_id']?>" class="btn btn-success"><i class="fas fa-user-plus"></i> Registruoti dalyvį</a>
+                <?php if (is_admin()): ?>
                 <a href="../reports/result_sheet.php?olympiad_id=<?=$olympiad['konk_id']?>" class="btn btn-info text-white"><i class="fas fa-check-square"></i> Suvesti rezultatus</a>
+                <?php endif; ?>
             <?php endif; ?>
             
-            <!-- Tiesioginio spausdinimo nuorodos toje pačioje kortelėje (nėra target="_blank") -->
+            <?php if (is_admin()): ?>
+            <!-- SAUGU: šie įrankiai (kodai, parašai, vertinimas, protokolas su rezultatais) rodomi tik administratoriui -->
             <a href="../reports/participant_id.php?olympiad=<?=urlencode($olympiad['konkurso_pav'])?>&print=1" class="btn btn-dark"><i class="fas fa-barcode"></i> Kodų lapas</a>
             <a href="../reports/signature_sheets.php?olympiad=<?=urlencode($olympiad['konkurso_pav'])?>&print=1" class="btn btn-warning"><i class="fas fa-file-signature"></i> Parašų lapas</a>
             <a href="../reports/evaluation_sheets.php?olympiad=<?=urlencode($olympiad['konkurso_pav'])?>&print_empty=1" class="btn btn-primary"><i class="fas fa-clipboard-list"></i> Vertinimo lapai</a>
             <a href="../reports/protocols.php?olympiad=<?=urlencode($olympiad['konkurso_pav'])?>&print=1" class="btn btn-secondary"><i class="fas fa-file-alt"></i> Protokolas</a>
+            <?php endif; ?>
             
             <button onclick="window.print();" class="btn btn-outline-dark"><i class="fas fa-print"></i> Spausdinti lentelę</button>
         </div>
@@ -146,12 +151,14 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             <th class="d-none d-print-table-cell">Klasė</th>
                             
                             <th>Mokykla</th>
+                            <?php if (is_admin()): ?>
                             <th>Balai</th>
                             <th>Vieta</th>
                             <?php if ($is_smsm): ?>
                                 <th class="pe-3">Kitas etapas</th>
                             <?php else: ?>
                                 <th class="pe-3"></th>
+                            <?php endif; ?>
                             <?php endif; ?>
                         </tr>
                     </thead>
@@ -162,6 +169,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             <td><strong><?php echo htmlspecialchars($p['1_pavarde'] ?? ''); ?></strong></td>
                             <td><?php echo htmlspecialchars($p['1_klase'] ?? ''); ?></td>
                             <td><?php echo htmlspecialchars($p['mokykla_pilna'] ?? $p['var_mokykla'] ?? ''); ?></td>
+                            <?php if (is_admin()): ?>
                             <td>
                                 <!-- Apsaugota nuo NULL klaidų. Tinka ir tuomet, kai balai lygūs "0" -->
                                 <?php if(isset($p['Balai']) && $p['Balai'] !== ''): ?>
@@ -199,10 +207,11 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             <?php else: ?>
                                 <td class="pe-3"></td>
                             <?php endif; ?>
+                            <?php endif; ?>
                             
                         </tr>
                         <?php endforeach; else: ?>
-                            <tr><td colspan="7" class="text-center text-muted py-5">Dalyvių šioje olimpiadoje dar nėra.</td></tr>
+                            <tr><td colspan="<?php echo is_admin() ? 7 : 4; ?>" class="text-center text-muted py-5">Dalyvių šioje olimpiadoje dar nėra.</td></tr>
                         <?php endif; ?>
                     </tbody>
                 </table>

@@ -15,6 +15,13 @@ if (!is_logged_in()) {
     redirect(SITE_URL . '/modules/auth/login.php');
 }
 
+// SAUGU: ataskaitos apima rezultatus, todėl visas modulis skirtas tik administratoriui
+if (!is_admin()) {
+    set_message('Neturite teisių pasiekti ataskaitų modulio.', 'error');
+    redirect(SITE_URL);
+    exit;
+}
+
 // Įtraukiame antraštę
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 ?>

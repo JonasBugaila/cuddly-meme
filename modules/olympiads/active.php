@@ -42,6 +42,8 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <a href="../registration/register.php?olympiad_id=<?=$oly['konk_id']?>" class="btn btn-sm btn-success">
                                     <i class="fas fa-user-plus"></i> Registruoti
                                 </a>
+                                <?php if (is_admin()): ?>
+                                <!-- SAUGU: šie įrankiai (kodai, parašai, vertinimas, protokolas su rezultatais) rodomi tik administratoriui -->
                                 <a href="../reports/participant_id.php?olympiad=<?=urlencode($oly['konkurso_pav'])?>" target="_blank" class="btn btn-sm btn-dark">
                                     <i class="fas fa-barcode"></i> Kodai
                                 </a>
@@ -54,6 +56,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <a href="../reports/protocols.php?olympiad=<?=urlencode($oly['konkurso_pav'])?>" target="_blank" class="btn btn-sm btn-secondary">
                                     <i class="fas fa-file-alt"></i> Protokolas
                                 </a>
+                                <?php endif; ?>
                             </div>
                         </td>
                     </tr>

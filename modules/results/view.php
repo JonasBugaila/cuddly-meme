@@ -15,6 +15,15 @@ if (!is_logged_in()) {
     redirect(SITE_URL . '/modules/auth/login.php');
 }
 
+// SAUGU: rezultatus (balus, vietas) mato ir tvarko tik administratorius.
+// Mokytojai (paprasti vartotojai) rezultatų peržiūrėti negali.
+if (!is_admin()) {
+    log_action('Saugumo pažeidimas', 'Bandyta pasiekti rezultatų puslapį be admin teisių.');
+    set_message('Neturite teisių peržiūrėti rezultatų.', 'error');
+    redirect(SITE_URL);
+    exit;
+}
+
 // Tikriname ar nurodytas olimpiados ID
 if (!isset($_GET['olympiad_id']) || empty($_GET['olympiad_id'])) {
     set_message('Nenurodyta olimpiada', 'error');

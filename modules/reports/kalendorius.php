@@ -85,8 +85,9 @@ $is_admin_global = function_exists('is_admin') && is_admin();
         <p class="text-muted mb-4">Ką norėtumėte daryti su šia olimpiada?</p>
         <div class="d-grid gap-2">
             <a href="#" id="globalBtnRegister" class="btn btn-primary btn-lg fw-bold"><i class="fas fa-user-plus me-2"></i> Registruoti mokinius</a>
+            <?php if ($is_admin_global): ?>
+            <!-- SAUGU: rezultatų peržiūra ir olimpiados administravimas rodomi tik administratoriui -->
             <a href="#" id="globalBtnResults" class="btn btn-outline-secondary btn-lg fw-bold"><i class="fas fa-poll-h me-2"></i> Žiūrėti rezultatus</a>
-            <?php if($is_admin_global): ?>
             <a href="#" id="globalBtnManage" class="btn btn-outline-danger btn-lg fw-bold"><i class="fas fa-cog me-2"></i> Administruoti olimpiadą</a>
             <?php endif; ?>
         </div>
@@ -149,9 +150,10 @@ document.addEventListener('DOMContentLoaded', function() {
                             var baseUrl = "<?php echo defined('SITE_URL') ? SITE_URL : ''; ?>";
                             
                             document.getElementById('globalBtnRegister').href = baseUrl + '/modules/registration/index.php?konk_id=' + info.event.id;
-                            document.getElementById('globalBtnResults').href = baseUrl + '/modules/results/index.php?f_olympiad=' + encodeURIComponent(info.event.extendedProps.pavadinimas);
                             
                             <?php if($is_admin_global): ?>
+                            // SAUGU: šie mygtukai HTML'e egzistuoja tik administratoriui
+                            document.getElementById('globalBtnResults').href = baseUrl + '/modules/results/index.php?f_olympiad=' + encodeURIComponent(info.event.extendedProps.pavadinimas);
                             document.getElementById('globalBtnManage').href = baseUrl + '/modules/olympiads/view.php?id=' + info.event.id;
                             <?php endif; ?>
                             

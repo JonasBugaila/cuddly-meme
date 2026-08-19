@@ -11,6 +11,15 @@ if (!is_logged_in()) {
     exit;
 }
 
+// SAUGU: statistika apima visų mokyklų rezultatų suvestinę (prizininkų skaičių ir kt.),
+// todėl matoma tik administratoriui.
+if (!is_admin()) {
+    log_action('Saugumo pažeidimas', 'Bandyta pasiekti mokyklų statistiką be admin teisių.');
+    set_message('Neturite teisių peržiūrėti šios statistikos.', 'error');
+    redirect(SITE_URL);
+    exit;
+}
+
 // Puslapiavimo nustatymai
 $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 25;
 $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;

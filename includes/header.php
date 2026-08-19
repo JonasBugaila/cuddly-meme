@@ -219,21 +219,29 @@ footer, .footer, .sticky-footer { background-color: var(--theme-footer-bg) !impo
                         <a href="<?php echo SITE_URL; ?>/modules/olympiads/index.php" class="nav-link <?php echo strpos(current_url(), '/modules/olympiads/') !== false ? 'active' : ''; ?>">Olimpiados</a>
                     </li>
                     <li class="nav-item">
-                        <a href="<?php echo SITE_URL; ?>/modules/registration/index.php" class="nav-link <?php echo strpos(current_url(), '/modules/registration/') !== false ? 'active' : ''; ?>">Registracija</a>
+                        <a href="<?php echo SITE_URL; ?>/modules/registration/index.php" class="nav-link <?php echo (strpos(current_url(), '/modules/registration/') !== false && strpos(current_url(), 'my_students') === false && strpos(current_url(), 'edit_participant') === false) ? 'active' : ''; ?>">Registracija</a>
                     </li>
+                    <?php if (!is_admin()): ?>
+                    <!-- Administratorius savo pilną dalyvių valdymo įrankį turi per "Administravimas" -> "Dalyvių valdymas" -->
                     <li class="nav-item">
-                        <a href="<?php echo SITE_URL; ?>/modules/results/index.php" class="nav-link <?php echo strpos(current_url(), '/modules/results/') !== false ? 'active' : ''; ?>">Rezultatai</a>
+                        <a href="<?php echo SITE_URL; ?>/modules/registration/my_students.php" class="nav-link <?php echo (strpos(current_url(), 'my_students') !== false || strpos(current_url(), 'edit_participant') !== false) ? 'active' : ''; ?>">Mano dalyviai</a>
                     </li>
+                    <?php endif; ?>
+                    <!-- SAUGU: kalendorius matomas visiems prisijungusiems (ir mokytojams, ir administratoriams) -->
                     <li class="nav-item">
-                        <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" class="nav-link <?php echo strpos(current_url(), '/modules/reports/') !== false ? 'active' : ''; ?>">Ataskaitos</a>
+                        <a href="<?php echo SITE_URL; ?>/modules/reports/kalendorius.php" class="nav-link">Kalendorius</a>
                     </li>
                     <?php if (is_admin()): ?>
+                        <!-- SAUGU: rezultatai ir ataskaitos rodo balus/vietas, todėl matomi tik administratoriui -->
+                        <li class="nav-item">
+                            <a href="<?php echo SITE_URL; ?>/modules/results/index.php" class="nav-link <?php echo strpos(current_url(), '/modules/results/') !== false ? 'active' : ''; ?>">Rezultatai</a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="<?php echo SITE_URL; ?>/modules/reports/index.php" class="nav-link <?php echo strpos(current_url(), '/modules/reports/') !== false ? 'active' : ''; ?>">Ataskaitos</a>
+                        </li>
                         <li class="nav-item">
                             <a href="<?php echo SITE_URL; ?>/modules/admin/index.php" class="nav-link <?php echo strpos(current_url(), '/modules/admin/') !== false ? 'active' : ''; ?>">Administravimas</a>
                         </li>
-						 <li class="nav-item">
-                        <a href="<?php echo SITE_URL; ?>/modules/reports/kalendorius.php" class="nav-link <?php echo strpos(current_url(), '/modules/reports/') !== false ? 'active' : ''; ?>">Kalendorius</a>
-                    </li>
                     <?php endif; ?>
                 <?php endif; ?>
             </ul>

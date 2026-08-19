@@ -105,6 +105,17 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                         </div>
                     </div>
+                    <div class="col-md-4">
+                        <div class="card admin-card mb-4">
+                            <div class="card-header">
+                                <h3>Mokytojų veiklos žurnalas</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>Atskiras mokytojų registravimo ir redagavimo veiksmų žurnalas.</p>
+                                <a href="<?php echo SITE_URL; ?>/modules/admin/teacher_logs.php" class="btn btn-primary">Mokytojų žurnalas</a>
+                            </div>
+                        </div>
+                    </div>
 					<div class="row">
 					<div class="col-md-4">
                         <div class="card admin-card mb-4">

@@ -16,6 +16,14 @@ if (!is_logged_in()) {
     exit;
 }
 
+// SAUGU: rezultatai matomi tik administratoriui. Mokytojai (paprasti vartotojai)
+// rezultatų peržiūrėti ir keisti negali.
+if (!is_admin()) {
+    set_message('Neturite teisių peržiūrėti rezultatų.', 'error');
+    redirect(SITE_URL);
+    exit;
+}
+
 // 1. FILTRAI IR PAIEŠKA
 $where_clauses = ["1=1"];
 $params = [];

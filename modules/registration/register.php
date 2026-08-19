@@ -62,6 +62,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])
                 );
                 
                 if ($stmt->execute()) {
+                    $new_reg_id = $conn->insert_id;
+                    // NAUJA: dalyvio registravimas fiksuojamas atskirame mokytojų veiklos žurnale
+                    log_teacher_action(
+                        'Registravo dalyvį',
+                        "{$vardas} {$pavarde} ({$klase} kl.) į \"{$konkurso_pav}\" ({$var_mokykla})",
+                        $new_reg_id
+                    );
                     set_message('Dalyvis sėkmingai užregistruotas į olimpiadą!', 'success');
                 } else {
                     set_message('Klaida išsaugant duomenis: ' . $stmt->error, 'error');

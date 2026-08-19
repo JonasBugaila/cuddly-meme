@@ -14,6 +14,14 @@ if (!is_logged_in()) {
     redirect(SITE_URL . '/modules/auth/login.php');
 }
 
+// SAUGU: ši ataskaita rodo rezultatus (Balai/Vieta), todėl matoma tik administratoriui
+if (!is_admin()) {
+    log_action('Saugumo pažeidimas', 'Bandyta pasiekti mokyklų olimpiadų ataskaitą be admin teisių.');
+    set_message('Neturite teisių peržiūrėti šios ataskaitos.', 'error');
+    redirect(SITE_URL);
+    exit;
+}
+
 // Gauname parametrus
 $selected_olympiad = isset($_GET['olympiad']) ? trim(sanitize_input($_GET['olympiad'])) : '';
 $current_page = isset($_GET['page']) ? max(1, (int)sanitize_input($_GET['page'])) : 1;

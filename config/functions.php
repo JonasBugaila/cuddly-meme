@@ -330,6 +330,48 @@ function log_action($action, $details = '') {
     }
 }
 
+/**
+ * NAUJA: atskiras mokytojų (paprastų vartotojų) veiklos žurnalas.
+ * Fiksuoja tik mokytojo (ne admin) atliekamus veiksmus: dalyvių registravimą
+ * ir redagavimą. Saugoma atskiroje lentelėje 'teacher_activity_log',
+ * nesumaišant su bendru admin/sistemos žurnalu 'system_logs'.
+ */
+function log_teacher_action($action, $details = '', $reg_id = null) {
+    start_session();
+    if (!isset($_SESSION['user_id']) || empty($_SESSION['user_id'])) {
+        return;
+    }
+
+    $vart_id = $_SESSION['user_id'];
+
+    // Mokyklos pavadinimą kešuojame sesijoje, kad nereikėtų kaskart klausti DB
+    if (!isset($_SESSION['user_school']) && function_exists('db_query')) {
+        $row = db_get_row(db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$vart_id], 's'));
+        $_SESSION['user_school'] = $row['var_mokykla'] ?? '';
+    }
+    $var_mokykla = $_SESSION['user_school'] ?? '';
+
+    $ip_address = $_SERVER['REMOTE_ADDR'] ?? 'Nežinomas IP';
+    if (array_key_exists('HTTP_X_FORWARDED_FOR', $_SERVER)) {
+        $ip_address = $_SERVER['HTTP_X_FORWARDED_FOR'];
+    }
+
+    $data = [
+        'vart_id' => sanitize_input($vart_id),
+        'var_mokykla' => sanitize_input($var_mokykla),
+        'action' => sanitize_input($action),
+        'details' => sanitize_input($details),
+        'ip_address' => sanitize_input($ip_address)
+    ];
+    if ($reg_id !== null) {
+        $data['reg_id'] = (int)$reg_id;
+    }
+
+    if (function_exists('db_insert')) {
+        db_insert('teacher_activity_log', $data);
+    }
+}
+
 function build_url_with_params($new_params) {
     $query_params = $_GET;
     foreach ($new_params as $key => $value) {
