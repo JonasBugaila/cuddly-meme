@@ -13,11 +13,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 if (!is_logged_in()) {
     set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
     redirect(SITE_URL . '/modules/auth/login.php');
-    exit;
 } elseif (!is_admin()) {
     set_message('Neturite teisių pasiekti šį puslapį', 'error');
     redirect(SITE_URL);
-    exit;
 }
 
 // Gauname vartotojų sąrašą (atsakingų asmenų)
@@ -47,13 +45,6 @@ if (empty($groups)) {
 // Apdorojame formą
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $errors = [];
-    
-    // SAUGUMAS: Tikriname CSRF žetoną (Apsauga nuo formų klastojimo)
-    if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
-        set_message('Saugumo klaida. Neteisingas CSRF žetonas.', 'error');
-        redirect(current_url());
-        exit;
-    }
     
     // Tikriname ar įvestas olimpiados pavadinimas
     if (empty($_POST['pavadinimas'])) {
@@ -92,7 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result) {
             set_message('Olimpiada sėkmingai užregistruota', 'success');
             redirect(SITE_URL . '/modules/admin/olympiad_add.php');
-            exit;
         } else {
             $conn = db_connect();
             error_log("Klaida registruojant olimpiadą: " . $conn->error);
@@ -105,38 +95,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// FUNKCIONALUMAS: Nustatome iš anksto užpildomą datą (iš kalendoriaus arba klaidos atveju iš POST)
-$default_date = '';
-if (isset($_POST['data'])) {
-    $default_date = $_POST['data'];
-} elseif (isset($_GET['data'])) {
-    $default_date = $_GET['data']; // Pagauna URL parametrą ?data=YYYY-MM-DD iš kalendoriaus
-}
-
 // Įtraukiame antraštę
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 ?>
 
-<div class="container mt-4 mb-5">
+<div class="container mt-4">
     <div class="row">
         <div class="col-12">
-            <div class="card shadow-sm border-0">
-                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-                    <h1 class="h4 mb-0"><i class="fas fa-plus-circle"></i> Olimpiados registracija</h1>
-                    <a href="<?php echo SITE_URL; ?>/modules/admin/olympiads.php" class="btn btn-sm btn-light text-primary fw-bold"><i class="fas fa-arrow-left"></i> Grįžti į sąrašą</a>
+            <div class="card">
+                <div class="card-header">
+                    <h1>Olimpiados registracija</h1>
                 </div>
-                <div class="card-body bg-light">
-                    <?php display_message(); ?>
-                    
-                    <form action="<?php echo SITE_URL; ?>/modules/admin/olympiad_add.php" method="post" class="needs-validation bg-white p-4 border rounded shadow-sm" novalidate>
-                        
-                        <!-- SAUGUMAS: Privalomas CSRF žetonas formoje -->
-                        <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
-                        
+                <div class="card-body">
+                    <form action="<?php echo SITE_URL; ?>/modules/admin/olympiad_add.php" method="post" class="needs-validation" novalidate>
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group mb-3">
-                                    <label for="pavadinimas" class="form-label fw-bold">Konkurso (olimpiados) pavadinimas <span class="text-danger">*</span></label>
+                                    <label for="pavadinimas" class="form-label">Konkurso (olimpiados) pavadinimas *</label>
                                     <input type="text" class="form-control" id="pavadinimas" name="pavadinimas" value="<?php echo isset($_POST['pavadinimas']) ? htmlspecialchars($_POST['pavadinimas']) : ''; ?>" required>
                                     <div class="invalid-feedback">
                                         Prašome įvesti olimpiados pavadinimą
@@ -145,14 +120,14 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group mb-3">
-                                    <label for="atsakingas" class="form-label fw-bold">Atsakingas <span class="text-danger">*</span></label>
-                                    <select class="form-select" id="atsakingas" name="atsakingas" required>
+                                    <label for="atsakingas" class="form-label">Atsakingas *</label>
+                                    <select class="form-control" id="atsakingas" name="atsakingas" required>
                                         <option value="">Pasirinkite atsakingą asmenį</option>
                                         <?php foreach ($users as $user): ?>
                                             <?php $full_name = $user['var_vardas'] . ' ' . $user['var_pavarde']; ?>
-                                            <option value="<?php echo htmlspecialchars($full_name); ?>" <?php echo isset($_POST['atsakingas']) && $_POST['atsakingas'] == $full_name ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($full_name); ?>
-                                            </option>
+<option value="<?php echo htmlspecialchars($full_name); ?>" <?php echo isset($_POST['atsakingas']) && $_POST['atsakingas'] == $full_name ? 'selected' : ''; ?>>
+    <?php echo htmlspecialchars($full_name); ?>
+</option>
                                         <?php endforeach; ?>
                                     </select>
                                     <div class="invalid-feedback">
@@ -162,30 +137,38 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                         </div>
                         
-                        <div class="row bg-light p-3 rounded mb-3 mx-0 border">
+                        <div class="row">
                             <div class="col-md-6">
-                                <div class="form-group mb-0">
-                                    <label class="form-label fw-bold text-secondary">Renginys inicijuotas ne mūsų rajono mokytojų?</label>
-                                    <div class="form-check mt-1">
+                                <div class="form-group mb-3">
+                                    <label class="form-label">Renginys inicijuotas ne mūsų rajono mokytojų</label>
+                                    <div class="form-check">
                                         <input class="form-check-input" type="radio" name="ne_rajono" id="ne_rajono_taip" value="taip" <?php echo isset($_POST['ne_rajono']) && $_POST['ne_rajono'] == 'taip' ? 'checked' : ''; ?>>
-                                        <label class="form-check-label" for="ne_rajono_taip">Taip</label>
+                                        <label class="form-check-label" for="ne_rajono_taip">
+                                            Taip
+                                        </label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="ne_rajono" id="ne_rajono_ne" value="ne" <?php echo !isset($_POST['ne_rajono']) || $_POST['ne_rajono'] == 'ne' ? 'checked' : ''; ?>>
-                                        <label class="form-check-label" for="ne_rajono_ne">Ne</label>
+                                        <label class="form-check-label" for="ne_rajono_ne">
+                                            Ne
+                                        </label>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-6">
-                                <div class="form-group mb-0">
-                                    <label class="form-label fw-bold text-secondary">Renginys patvirtintas pagal ŠMSM renginių grafiką?</label>
-                                    <div class="form-check mt-1">
+                                <div class="form-group mb-3">
+                                    <label class="form-label">Renginys patvirtintas pagal ŠMSM renginių grafiką</label>
+                                    <div class="form-check">
                                         <input class="form-check-input" type="radio" name="smsm_patvirtintas" id="smsm_patvirtintas_taip" value="taip" <?php echo isset($_POST['smsm_patvirtintas']) && $_POST['smsm_patvirtintas'] == 'taip' ? 'checked' : ''; ?>>
-                                        <label class="form-check-label text-success fw-bold" for="smsm_patvirtintas_taip">Taip</label>
+                                        <label class="form-check-label" for="smsm_patvirtintas_taip">
+                                            Taip
+                                        </label>
                                     </div>
                                     <div class="form-check">
                                         <input class="form-check-input" type="radio" name="smsm_patvirtintas" id="smsm_patvirtintas_ne" value="ne" <?php echo !isset($_POST['smsm_patvirtintas']) || $_POST['smsm_patvirtintas'] == 'ne' ? 'checked' : ''; ?>>
-                                        <label class="form-check-label" for="smsm_patvirtintas_ne">Ne</label>
+                                        <label class="form-check-label" for="smsm_patvirtintas_ne">
+                                            Ne
+                                        </label>
                                     </div>
                                 </div>
                             </div>
@@ -194,13 +177,13 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group mb-3">
-                                    <label for="grupe" class="form-label fw-bold">Grupė <span class="text-danger">*</span></label>
-                                    <select class="form-select" id="grupe" name="grupe" required>
+                                    <label for="grupe" class="form-label">Grupė *</label>
+                                    <select class="form-control" id="grupe" name="grupe" required>
                                         <option value="">Pasirinkite grupę</option>
                                         <?php foreach ($groups as $group): ?>
                                             <option value="<?php echo htmlspecialchars($group['grupe']); ?>" <?php echo isset($_POST['grupe']) && $_POST['grupe'] == $group['grupe'] ? 'selected' : ''; ?>>
-                                                <?php echo htmlspecialchars($group['grupe']); ?>
-                                            </option>
+    <?php echo htmlspecialchars($group['grupe']); ?>
+</option>
                                         <?php endforeach; ?>
                                     </select>
                                     <div class="invalid-feedback">
@@ -210,25 +193,24 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                             <div class="col-md-6">
                                 <div class="form-group mb-3">
-                                    <label for="data" class="form-label fw-bold">Data</label>
-                                    <!-- IŠTAISYTA: Dabar laukelis automatiškai paima kalendoriaus parametrą $default_date -->
-                                    <input type="date" class="form-control border-primary" id="data" name="data" value="<?php echo htmlspecialchars($default_date); ?>">
+                                    <label for="data" class="form-label">Data</label>
+                                    <input type="date" class="form-control" id="data" name="data" value="<?php echo isset($_POST['data']) ? htmlspecialchars($_POST['data']) : ''; ?>">
                                 </div>
                             </div>
                         </div>
                         
                         <div class="form-group mb-3">
-                            <label for="vieta" class="form-label fw-bold">Vieta</label>
+                            <label for="vieta" class="form-label">Vieta</label>
                             <input type="text" class="form-control" id="vieta" name="vieta" value="<?php echo isset($_POST['vieta']) ? htmlspecialchars($_POST['vieta']) : ''; ?>">
                         </div>
                         
-                        <div class="form-group mb-4">
-                            <label for="aprasymas" class="form-label fw-bold">Aprašymas</label>
-                            <textarea class="form-control" id="aprasymas" name="aprasymas" rows="4"><?php echo isset($_POST['aprasymas']) ? htmlspecialchars($_POST['aprasymas']) : ''; ?></textarea>
+                        <div class="form-group mb-3">
+                            <label for="aprasymas" class="form-label">Aprašymas</label>
+                            <textarea class="form-control" id="aprasymas" name="aprasymas" rows="3"><?php echo isset($_POST['aprasymas']) ? htmlspecialchars($_POST['aprasymas']) : ''; ?></textarea>
                         </div>
                         
-                        <div class="form-group border-top pt-3">
-                            <button type="submit" class="btn btn-primary btn-lg px-4 shadow-sm"><i class="fas fa-save me-1"></i> Registruoti olimpiadą</button>
+                        <div class="form-group">
+                            <button type="submit" class="btn btn-primary">Registruoti olimpiadą</button>
                         </div>
                     </form>
                 </div>
@@ -256,4 +238,6 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 })();
 </script>
 
-<?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>
+<?php
+require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php';
+?>

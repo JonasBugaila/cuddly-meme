@@ -15,13 +15,17 @@ Options -Indexes
 </FilesMatch>
 
 # Blokavimas konfigūracijos ir jautrių aplankų iš išorės
-<IfModule mod_rewrite.c>
-    RewriteEngine On
-    RewriteRule ^config/(.*)$ - [F,L]
-    RewriteRule ^vendor/(.*)$ - [F,L]
-    RewriteRule ^includes/(.*)$ - [F,L]
-</IfModule>
+#<IfModule mod_rewrite.c>
+ #   RewriteEngine On
 
+    # Priverstinis HTTPS nukreipimas
+ #   RewriteCond %{HTTPS} off
+ #   RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+ #   RewriteRule ^config/(.*)$ - [F,L]
+  #  RewriteRule ^vendor/(.*)$ - [F,L]
+ #   RewriteRule ^includes/(.*)$ - [F,L]
+#</IfModule>
 
 # logs/.htaccess
 Require all denied

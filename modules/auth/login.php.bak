@@ -4,30 +4,34 @@ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
-// Produkcijoje klaidų rodymas išjungiamas
+// IŠTAISYTA: Saugumo sumetimais produkcijoje klaidų rodymas išjungiamas
 ini_set('display_errors', 0);
 error_reporting(0);
 
 // Jei vartotojas jau prisijungęs, nukreipiame į pagrindinį puslapį
 if (is_logged_in()) {
     redirect(SITE_URL);
-    exit;
 }
 
 // Apdorojame prisijungimo formą
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Saugumo patikra: ar egzistuoja ir sutampa CSRF žetonas
     if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
+        if (function_exists('log_action')) {
+            log_action('Klaida prisijungiant', 'Klaidingas CSRF žetonas bandant prisijungti.');
+        }
         set_message('Klaidingas sesijos žetonas. Saugumo sumetimais bandykite iš naujo.', 'error');
         redirect(SITE_URL . '/modules/auth/login.php');
-        exit;
     }
 
+    // Tikriname ar užpildyti visi laukai
     if (empty($_POST['username']) || empty($_POST['password'])) {
         set_message('Prašome užpildyti visus laukus', 'error');
     } else {
         $username = sanitize_input($_POST['username']);
-        $password = $_POST['password'];
+        $password = $_POST['password']; // Slaptažodžio nesanitizuojame, leidžiame specialius simbolius!
         
+        // Saugus SQL vykdymas per `db_query` su parameter binding
         $sql = "SELECT * FROM vartotojas WHERE vart_id = ?";
         $stmt = db_query($sql, [$username], 's');
         
@@ -38,49 +42,64 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $is_valid = false;
                 $needs_rehash = false;
 
+                // MIGRACIJOS LOGIKA SLAPTAŽODŽIAMS:
+                // Tikriname, ar slaptažodis DB jau yra užšifruotas (Bcrypt hash visada prasideda "$2y$")
                 if (strpos($user['var_slapt'], '$2y$') === 0) {
+                    // Jei taip, tikriname naudodami saugią funkciją
                     $is_valid = verify_password($password, $user['var_slapt']);
                 } else {
+                    // Jei ne, tikriname su senu paprastu tekstu (laikinas sprendimas senoms paskyroms)
                     if ($password === $user['var_slapt']) {
                         $is_valid = true;
-                        $needs_rehash = true;
+                        $needs_rehash = true; // Pažymime, kad šį slaptažodį jau reikia užšifruoti
                     }
                 }
 
                 if ($is_valid) {
+                    // Jei prisijungta su senu neužšifruotu slaptažodžiu, užšifruojame ir išsaugome DB ateičiai!
                     if ($needs_rehash) {
                         $new_hash = hash_password($password);
                         db_update('vartotojas', ['var_slapt' => $new_hash], "vart_id = ?", [$user['vart_id']]);
                     }
 
+                    // Sėkmingas prisijungimas
                     start_session();
-                    session_regenerate_id(true);
                     
-                    if (isset($user['must_change_password']) && $user['must_change_password'] == 1) {
-                        $_SESSION['temp_user_id'] = $user['vart_id'];
-                        $_SESSION['temp_user_name'] = $user['var_vardas'] . ' ' . $user['var_pavarde'];
-                        $_SESSION['temp_user_level'] = $user['vart_lygis'];
-                        $_SESSION['require_password_change'] = true;
-                        redirect(SITE_URL . '/modules/auth/change_password.php');
-                        exit;
-                    }
+                    // IŠTAISYTA: Apsauga nuo Sesijos Fiksacijos (Session Fixation)
+                    session_regenerate_id(true);
                     
                     $_SESSION['user_id'] = $user['vart_id'];
                     $_SESSION['user_name'] = $user['var_vardas'] . ' ' . $user['var_pavarde'];
                     $_SESSION['user_level'] = $user['vart_lygis'];
                     
+                    // Įrašome į sisteminį žurnalą
+                    if (function_exists('log_action')) {
+                        log_action('Sėkmingas prisijungimas', "Vartotojas {$user['vart_id']} prisijungė prie sistemos.");
+                    }
+                    
+                    // Nukreipiame į pagrindinį puslapį
                     redirect(SITE_URL);
-                    exit;
                 } else {
+                    // Neteisingas slaptažodis
+                    if (function_exists('log_action')) {
+                        log_action('Nepavykęs prisijungimas', "Neteisingas slaptažodis bandant prisijungti prie paskyros: $username");
+                    }
                     set_message('Neteisingas vartotojo vardas arba slaptažodis', 'error');
                 }
             } else {
+                // Vartotojas nerastas
+                if (function_exists('log_action')) {
+                    log_action('Nepavykęs prisijungimas', "Bandyta prisijungti prie neegzistuojančios paskyros: $username");
+                }
                 set_message('Neteisingas vartotojo vardas arba slaptažodis', 'error');
             }
+        } else {
+            set_message('Sistemos klaida bandant prisijungti.', 'error');
         }
     }
 }
 
+// Įtraukiame antraštę
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 ?>
 
@@ -105,62 +124,17 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <input type="password" class="form-control" id="password" name="password" required>
                     </div>
 
-                    <!-- SLANKIOJANTI DĖLIONĖ (2FA) -->
-                    <div class="mb-4">
-                        <label class="form-label fw-bold">Saugumo patikra:</label>
-                        <div id="slider-container" style="position: relative; width: 100%; height: 45px; background: #e9ecef; border-radius: 5px; border: 1px solid #ced4da; display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden;">
-                            <div id="slider-text" style="font-size: 14px; color: #6c757d; user-select: none;">Slinkite, kad atrakintumėte</div>
-                            <div id="slider-btn" style="position: absolute; left: 0; width: 50px; height: 43px; background: #0d6efd; border-radius: 4px; cursor: grab; transition: background 0.2s; display: flex; align-items: center; justify-content: center;">
-                                <i class="fas fa-chevron-right" style="color: white;"></i>
-                            </div>
-                        </div>
+                    <div class="form-group mb-4">
+                        <button type="submit" class="btn btn-primary btn-lg w-100 fw-bold">Prisijungti</button>
                     </div>
 
-                    <div class="form-group mb-4">
-                        <button type="submit" id="login-btn" class="btn btn-primary btn-lg w-100 fw-bold" disabled>Prisijungti</button>
+                    <div class="form-group text-center">
+                        <p class="text-muted small mb-0">Pamiršote slaptažodį? Susisiekite su sistemos administratoriumi.</p>
                     </div>
                 </form>
             </div>
         </div>
     </div>
 </div>
-
-<script>
-    const sliderBtn = document.getElementById('slider-btn');
-    const sliderContainer = document.getElementById('slider-container');
-    const loginBtn = document.getElementById('login-btn');
-    const sliderText = document.getElementById('slider-text');
-    let isDragging = false;
-
-    sliderBtn.onmousedown = function(e) {
-        isDragging = true;
-    };
-
-    document.onmousemove = function(e) {
-        if (!isDragging) return;
-        
-        let containerRect = sliderContainer.getBoundingClientRect();
-        let newLeft = e.clientX - containerRect.left - 25; 
-
-        if (newLeft < 0) newLeft = 0;
-        if (newLeft > containerRect.width - 50) {
-            newLeft = containerRect.width - 50;
-            isDragging = false;
-            loginBtn.disabled = false;
-            sliderBtn.style.background = '#198754';
-            sliderText.textContent = 'Patvirtinta';
-            sliderText.style.color = 'white';
-        }
-        sliderBtn.style.left = newLeft + 'px';
-    };
-
-    document.onmouseup = function() {
-        if (isDragging) {
-            isDragging = false;
-            if (!loginBtn.disabled) return;
-            sliderBtn.style.left = '0px';
-        }
-    };
-</script>
 
 <?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>

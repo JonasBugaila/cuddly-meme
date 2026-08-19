@@ -14,10 +14,6 @@ start_session();
 <!DOCTYPE html>
 <html lang="lt">
 <head>
-<!-- Slider Captcha stiliai -->
-<link href="https://cdn.jsdelivr.net/npm/slider-captcha@1.2.3/dist/slidercaptcha.min.css" rel="stylesheet">
-<!-- Slider Captcha skriptas -->
-<script src="https://cdn.jsdelivr.net/npm/slider-captcha@1.2.3/dist/slidercaptcha.min.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo SITE_NAME; ?></title>
@@ -196,9 +192,6 @@ footer, .footer, .sticky-footer { background-color: var(--theme-footer-bg) !impo
                 <div class="user-info">
                     <?php if (is_logged_in()): ?>
                         <span>Sveiki, <?php echo htmlspecialchars($_SESSION['user_name']); ?></span>
-						<a href="<?php echo SITE_URL; ?>/modules/auth/change_password.php" class="btn btn-outline-warning btn-sm mx-2">
-    <i class="fas fa-key"></i> Keisti slaptažodį
-</a>
                         <a href="<?php echo SITE_URL; ?>/modules/auth/logout.php" class="btn btn-secondary">Atsijungti</a>
                     <?php else: ?>
                         <a href="<?php echo SITE_URL; ?>/modules/auth/login.php" class="btn btn-secondary">Prisijungti</a>

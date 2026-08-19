@@ -1,100 +1,108 @@
 <?php
 /**
  * Vartotojo redagavimo forma
- * 
- * Šis failas leidžia administratoriams redaguoti esamų vartotojų duomenis
  */
 
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
-
-
-// Gauname mokyklų sąrašą
 $sql = "SELECT mokyklos_id, pavadinimas FROM mokyklos ORDER BY pavadinimas ASC";
 $stmt = db_query($sql);
 $schools = db_get_results($stmt);
 
-// Tikriname, ar vartotojas prisijungęs ir turi administratoriaus teises
 if (!is_logged_in()) {
     set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
     redirect(SITE_URL . '/modules/auth/login.php');
+    exit;
 } elseif (!is_admin()) {
     set_message('Neturite teisių pasiekti šį puslapį', 'error');
     redirect(SITE_URL);
+    exit;
 }
 
-// Tikriname, ar pateiktas ID parametras
 if (!isset($_GET['id']) || empty($_GET['id'])) {
     set_message('Nenurodytas vartotojo ID. Prašome pasirinkti vartotoją iš sąrašo.', 'error');
     redirect(SITE_URL . '/modules/admin/users.php');
+    exit;
 }
 
-// Gauname vartotojo duomenis
 $user_id = sanitize_input($_GET['id']);
 $sql = "SELECT vart_id, var_vardas, var_pavarde, var_mokykla, vart_lygis, el_pastas FROM vartotojas WHERE vart_id = ?";
 $stmt = db_query($sql, [$user_id], 's');
 $user = db_get_row($stmt);
 
-// Apdorojame formą
+if (!$user) {
+    set_message('Vartotojas nerastas.', 'error');
+    redirect(SITE_URL . '/modules/admin/users.php');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'])) {
     $errors = [];
-    $user_id = sanitize_input($_POST['user_id']);
+    $post_user_id = sanitize_input($_POST['user_id']);
     
-    // Tikriname CSRF žetoną
-    if (!verify_csrf_token($_POST['csrf_token'])) {
-        $errors[] = 'Netinkamas CSRF žetonas';
+    if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
+        set_message('Netinkamas CSRF žetonas. Saugumo sumetimais bandykite dar kartą.', 'error');
+        redirect(current_url());
+        exit;
     }
     
-    // Tikriname vardą
     $vardas = sanitize_input($_POST['vardas']);
-    if (empty($vardas)) {
-        $errors[] = 'Prašome įvesti vardą';
-    }
+    if (empty($vardas)) $errors[] = 'Prašome įvesti vardą';
     
-    // Tikriname pavardę
     $pavarde = sanitize_input($_POST['pavarde']);
-    if (empty($pavarde)) {
-        $errors[] = 'Prašome įvesti pavardę';
+    if (empty($pavarde)) $errors[] = 'Prašome įvesti pavardę';
+    
+    $el_pastas = sanitize_input($_POST['elpastas'] ?? '');
+    if (empty($el_pastas) || !filter_var($el_pastas, FILTER_VALIDATE_EMAIL)) {
+        $errors[] = 'Prašome įvesti galiojantį el. pašto adresą';
     }
     
-    // Tikriname mokyklą
     $mokykla = sanitize_input($_POST['mokykla']);
-    if (empty($mokykla)) {
-        $errors[] = 'Prašome pasirinkti mokyklą';
-    }
+    if (empty($mokykla)) $errors[] = 'Prašome pasirinkti mokyklą';
     
-    // Tikriname rolę
     $tipas = sanitize_input($_POST['tipas']);
-    if (!in_array($tipas, ['user', 'admin'])) {
-        $errors[] = 'Neteisinga rolė';
-    }
+    if (!in_array($tipas, ['user', 'admin'])) $errors[] = 'Neteisinga rolė';
     
-    // Tikriname slaptažodį (nebūtinas, jei nekeičiamas)
     $slaptazodis = $_POST['slaptazodis'] ?? '';
     if (!empty($slaptazodis) && strlen($slaptazodis) < 6) {
-        $errors[] = 'Slaptažodis turi būti bent 6 simbolių ilgio';
+        $errors[] = 'Naujas slaptažodis turi būti bent 6 simbolių ilgio';
     }
     
-    // Jei nėra klaidų, atnaujiname vartotoją
     if (empty($errors)) {
         $data = [
             'var_vardas' => $vardas,
             'var_pavarde' => $pavarde,
-            'var_mokykla' => $mokykla, // Naudojame mokyklos_id
+            'el_pastas' => $el_pastas,
+            'var_mokykla' => $mokykla,
             'vart_lygis' => $tipas
         ];
         
+        $password_changed = false;
         if (!empty($slaptazodis)) {
-            $data['var_slapt'] = hash_password($slaptazodis); // Naudojame jūsų nešifruotą hash_password
+            $data['var_slapt'] = hash_password($slaptazodis);
+            $data['must_change_password'] = 1; 
+            $password_changed = true;
         }
         
-        $result = db_update('vartotojas', $data, 'vart_id = ?', [$user_id]);
+        $result = db_update('vartotojas', $data, 'vart_id = ?', [$post_user_id]);
         
         if ($result) {
-            set_message('Vartotojas sėkmingai atnaujintas', 'success');
-            redirect(SITE_URL . '/modules/admin/user_edit.php?id=' . $user_id);
+            if ($password_changed) {
+                // Išsaugome sesiją PDF generavimui
+                $_SESSION['flash_credentials'] = [
+                    'vardas_pavarde' => $vardas . ' ' . $pavarde,
+                    'vart_id' => $post_user_id,
+                    'password' => $slaptazodis
+                ];
+                set_message('Vartotojas sėkmingai atnaujintas.', 'success');
+            } else {
+                set_message('Vartotojo duomenys sėkmingai atnaujinti.', 'success');
+            }
+            
+            redirect(SITE_URL . '/modules/admin/user_edit.php?id=' . urlencode($post_user_id));
+            exit;
         } else {
             global $conn;
             error_log("Update failed: " . $conn->error);
@@ -107,103 +115,137 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'])) {
     }
 }
 
-// Įtraukiame antraštę
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 ?>
 
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h1>Vartotojo redagavimas</h1>
+<div class="container mt-4 mb-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+                    <h1 class="h4 mb-0"><i class="fas fa-user-edit me-2"></i> Vartotojo redagavimas</h1>
+                    <a href="<?php echo SITE_URL; ?>/modules/admin/users.php" class="btn btn-sm btn-light text-primary fw-bold"><i class="fas fa-arrow-left"></i> Grįžti į sąrašą</a>
                 </div>
-                <div class="card-body">
+                <div class="card-body p-4 bg-light">
+                    
                     <?php display_message(); ?>
-                    <?php if ($user): ?>
-                        <form action="<?php echo SITE_URL; ?>/modules/admin/user_edit.php?id=<?php echo htmlspecialchars($user_id); ?>" method="post" class="needs-validation" novalidate>
-                            <input type="hidden" name="user_id" value="<?php echo htmlspecialchars($user['vart_id']); ?>">
-                            <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label for="vardas" class="form-label">Vardas *</label>
-                                        <input type="text" class="form-control" id="vardas" name="vardas" value="<?php echo htmlspecialchars($user['var_vardas']); ?>" required>
-                                        <div class="invalid-feedback">
-                                            Prašome įvesti vardą
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label for="pavarde" class="form-label">Pavardė *</label>
-                                        <input type="text" class="form-control" id="pavarde" name="pavarde" value="<?php echo htmlspecialchars($user['var_pavarde']); ?>" required>
-                                        <div class="invalid-feedback">
-                                            Prašome įvesti pavardę
-                                        </div>
-                                    </div>
+
+                    <!-- MYGTUKAS PDF ATSISIUNTIMUI / SPAUSDINIMUI -->
+                    <?php if (isset($_SESSION['flash_credentials'])): ?>
+                        <div class="alert alert-success d-flex flex-column flex-md-row justify-content-between align-items-center shadow border-success p-4 mb-4 rounded">
+                            <div class="mb-3 mb-md-0 d-flex align-items-center">
+                                <i class="fas fa-file-pdf fa-3x text-danger me-4"></i>
+                                <div>
+                                    <h4 class="mb-1 text-dark fw-bold">Naujas slaptažodis paruoštas!</h4>
+                                    <p class="mb-0 text-dark">Paspauskite mygtuką, kad atidarytumėte ir atspausdintumėte prisijungimo duomenis.</p>
                                 </div>
                             </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label for="mokykla" class="form-label">Mokykla *</label>
-                                        <select class="form-control" id="mokykla" name="mokykla" required>
-                                            <option value="">Pasirinkite mokyklą</option>
-                                            <?php foreach ($schools as $school): ?>
-                                                <option value="<?php echo htmlspecialchars($school['mokyklos_id']); ?>" <?php echo $user['var_mokykla'] == $school['mokyklos_id'] ? 'selected' : ''; ?>>
-                                                    <?php echo htmlspecialchars($school['pavadinimas']); ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <div class="invalid-feedback">
-                                            Prašome pasirinkti mokyklą
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label for="tipas" class="form-label">Rolė *</label>
-                                        <select class="form-control" id="tipas" name="tipas" required>
-                                            <option value="user" <?php echo $user['vart_lygis'] == 'user' ? 'selected' : ''; ?>>Vartotojas</option>
-                                            <option value="admin" <?php echo $user['vart_lygis'] == 'admin' ? 'selected' : ''; ?>>Administratorius</option>
-                                        </select>
-                                        <div class="invalid-feedback">
-                                            Prašome pasirinkti rolę
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <div class="form-group mb-3">
-                                        <label for="slaptazodis" class="form-label">Naujas slaptažodis (palikite tuščią, jei nekeičiate)</label>
-                                        <input type="password" class="form-control" id="slaptazodis" name="slaptazodis">
-                                        <div class="invalid-feedback">
-                                            Slaptažodis turi būti bent 6 simbolių ilgio
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div class="form-group">
-                                <button type="submit" class="btn btn-primary">Išsaugoti pakeitimus</button>
-                                <a href="<?php echo SITE_URL; ?>/modules/admin/users.php" class="btn btn-secondary ms-2">Grįžti</a>
-                            </div>
-                        </form>
-                    <?php else: ?>
-                        <p class="text-warning">Vartotojas su ID „<?php echo htmlspecialchars($user_id); ?>“ nerastas duomenų bazėje.</p>
-                        <a href="<?php echo SITE_URL; ?>/modules/admin/users.php" class="btn btn-secondary">Grįžti į vartotojų sąrašą</a>
+                            <!-- Privalomas target="_blank", kad neatnaujintų šio puslapio -->
+                            <a href="<?php echo SITE_URL; ?>/modules/admin/export_credentials.php" target="_blank" class="btn btn-danger btn-lg fw-bold shadow-sm px-4">
+                                <i class="fas fa-print me-2"></i> Atspausdinti PDF
+                            </a>
+                        </div>
                     <?php endif; ?>
+                    
+                    <form action="<?php echo SITE_URL; ?>/modules/admin/user_edit.php?id=<?php echo urlencode($user_id); ?>" method="post" class="needs-validation bg-white p-4 border rounded shadow-sm" novalidate>
+                        <input type="hidden" name="user_id" value="<?php echo htmlspecialchars($user['vart_id']); ?>">
+                        <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label fw-bold text-secondary">Vartotojo ID (Prisijungimo vardas)</label>
+                                <input type="text" class="form-control bg-light text-primary fw-bold" value="<?php echo htmlspecialchars($user['vart_id']); ?>" disabled readonly>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="vardas" class="form-label fw-bold">Vardas <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="vardas" name="vardas" value="<?php echo htmlspecialchars($user['var_vardas']); ?>" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="pavarde" class="form-label fw-bold">Pavardė <span class="text-danger">*</span></label>
+                                <input type="text" class="form-control" id="pavarde" name="pavarde" value="<?php echo htmlspecialchars($user['var_pavarde']); ?>" required>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="elpastas" class="form-label fw-bold">El. paštas <span class="text-danger">*</span></label>
+                                <input type="email" class="form-control" id="elpastas" name="elpastas" value="<?php echo htmlspecialchars($user['el_pastas'] ?? ''); ?>" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="tipas" class="form-label fw-bold">Rolė <span class="text-danger">*</span></label>
+                                <select class="form-select form-control" id="tipas" name="tipas" required>
+                                    <option value="user" <?php echo $user['vart_lygis'] == 'user' ? 'selected' : ''; ?>>Mokyklos atstovas</option>
+                                    <option value="admin" <?php echo $user['vart_lygis'] == 'admin' ? 'selected' : ''; ?>>Administratorius</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row">
+                            <div class="col-md-12 mb-3">
+                                <label for="mokykla" class="form-label fw-bold">Mokykla <span class="text-danger">*</span></label>
+                                <select class="form-select form-control" id="mokykla" name="mokykla" required>
+                                    <option value="">Pasirinkite mokyklą</option>
+                                    <?php foreach ($schools as $school): ?>
+                                        <option value="<?php echo htmlspecialchars($school['pavadinimas']); ?>" <?php echo $user['var_mokykla'] == $school['pavadinimas'] ? 'selected' : ''; ?>>
+                                            <?php echo htmlspecialchars($school['pavadinimas']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="row bg-light border p-3 mx-0 mb-4 rounded mt-2">
+                            <div class="col-md-12">
+                                <div class="form-group mb-0">
+                                    <label for="slaptazodis" class="form-label fw-bold text-dark">Naujas slaptažodis</label>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control border-warning" id="slaptazodis" name="slaptazodis" minlength="6" placeholder="Palikite tuščią, jei nenorite keisti">
+                                        <button class="btn btn-warning fw-bold text-dark" type="button" onclick="generatePassword()">Generuoti</button>
+                                    </div>
+                                    <small class="text-muted mt-1 d-block">Sukūrę naują slaptažodį, galėsite jį atspausdinti PDF formatu. Vartotojas privalės jį pasikeisti.</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group border-top pt-3">
+                            <button type="submit" class="btn btn-primary btn-lg px-4 shadow-sm"><i class="fas fa-save me-2"></i>Išsaugoti pakeitimus</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<?php
-require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php';
-?>
+<script>
+function generatePassword() {
+    var length = 10,
+        charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*",
+        retVal = "";
+    for (var i = 0, n = charset.length; i < length; ++i) {
+        retVal += charset.charAt(Math.floor(Math.random() * n));
+    }
+    document.getElementById("slaptazodis").value = retVal;
+}
+
+(function() {
+    'use strict';
+    window.addEventListener('load', function() {
+        var forms = document.getElementsByClassName('needs-validation');
+        var validation = Array.prototype.filter.call(forms, function(form) {
+            form.addEventListener('submit', function(event) {
+                if (form.checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    }, false);
+})();
+</script>
+
+<?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>
