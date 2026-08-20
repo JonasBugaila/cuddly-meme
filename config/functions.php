@@ -206,7 +206,7 @@ function generate_printable_table($title, $institution, $headers, $data, $option
     
     $print_id = 'print_' . uniqid();
     
-    $html .= '<div id="' . $print_id . '_printable" class="print-wrapper" style="counter-reset: page 0;">';
+    $html .= '<div id="' . $print_id . '_printable" class="print-wrapper">';
     $html .= '<div class="print-header">' . $header_html . '</div>';
     
     $html .= '<table class="table print-table w-100">';
@@ -224,12 +224,25 @@ function generate_printable_table($title, $institution, $headers, $data, $option
     }
     $html .= '</tbody></table>';
     
-    $footer_extra = '';
-    if (isset($layout['show_page_num']) && $layout['show_page_num'] == 1) {
-        $footer_extra = '<div class="page-number" style="text-align: right; margin-top: 15px; font-size: 10pt; color: #666;"></div>';
+    // PATAISYTA: anksčiau čia buvo naudojamas CSS skaitiklis (counter(page)), kuris
+    // buvo sugadintas - kadangi generate_printable_table() kviečiama PO KARTĄ kiekvienam
+    // puslapiui atskirai (per array_chunk() ciklą kviečiančiame faile), kiekvienas
+    // .print-wrapper turėjo savo "counter-reset: page", todėl skaitiklis niekada
+    // nesukaupdavo reikšmės tarp puslapių - visada rodydavo "Puslapis 1" be "iš X".
+    // Dabar naudojami TIKRI PHP apskaičiuoti skaičiai (kviečiantis failas juos jau žino
+    // iš array_chunk() rezultato), perduodami per $options['page_num']/['total_pages'].
+    $page_num_html = '';
+    if (isset($layout['show_page_num']) && $layout['show_page_num'] == 1
+        && isset($options['page_num']) && isset($options['total_pages'])) {
+        $page_num_html = '<div class="page-number">Puslapis ' . (int)$options['page_num'] . ' iš ' . (int)$options['total_pages'] . '</div>';
     }
     
-    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html . $footer_extra . '</div>';
+    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html . '</div>';
+    // PATAISYTA: puslapio numeris dabar - atskiras elementas, pozicionuojamas absoliučiai
+    // prie FIZINIO LAPO apačios (žr. .print-wrapper/.page-number CSS žemiau), o ne
+    // tiesiog po lentelės turiniu (kas anksčiau reiškė, kad jei lentelė nepripildo viso
+    // lapo, numeris atsirasdavo lapo viduryje, ne apačioje).
+    $html .= $page_num_html;
     $html .= '</div>'; 
     
     $html .= '<style>
@@ -245,7 +258,24 @@ function generate_printable_table($title, $institution, $headers, $data, $option
         @media print {
             .screen-loader { display: none !important; }
             .print-wrapper {
-                position: static; left: auto; top: auto; visibility: visible; display: block;
+                position: relative; left: auto; top: auto; visibility: visible; display: block;
+                /* PATAISYTA: .print-wrapper dabar užima visą lapo turinio aukštį (A4, 297mm,
+                   atėmus sukonfigūruotus paraštes) - tai leidžia .page-number elementui
+                   absoliučiai pozicionuotis prie TIKROS fizinio lapo apačios, o ne sekti
+                   iškart po lentelės turinio, jei jis nepripildo viso lapo.
+                   PASTABA: skaičiavimas daromas A4 formatui (Lietuvoje standartinis) - jei
+                   kada nors reikės palaikyti Letter formatą, čia reikėtų atskiro nustatymo. */
+                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . (int)($layout['margin_b'] ?? 20) . 'mm);
+                box-sizing: border-box;
+            }
+            .page-number {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                text-align: center;
+                font-size: 10pt;
+                color: #666;
             }
             body { 
                 background: #fff !important; padding: 0 !important;
@@ -255,8 +285,6 @@ function generate_printable_table($title, $institution, $headers, $data, $option
             @page { 
                 margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)($layout['margin_r'] ?? 20) . 'mm ' . (int)($layout['margin_b'] ?? 20) . 'mm ' . (int)($layout['margin_l'] ?? 20) . 'mm; 
             }
-            .print-wrapper { counter-reset: page; }
-            .page-number:after { content: "Puslapis " counter(page); counter-increment: page; }
         }
     </style>';
     

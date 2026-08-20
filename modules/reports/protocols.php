@@ -156,10 +156,11 @@ if ($print_mode && !empty($grouped_participants)) {
                 'signature_text' => 'Atsakingo asmens parašas',
                 'signature_name' => '',
                 'include_back_button' => false,
-                'back_button_text' => 'Grįžti'
+                'back_button_text' => 'Grįžti',
+                'page_num' => $page_num + 1,
+                'total_pages' => $total_pages
             ], 'protocol');
             
-            echo '<div style="text-align:center; margin-top:10px;">Puslapis ' . ($page_num + 1) . ' iš ' . $total_pages . '</div>';
             echo '</div>';
         }
     }

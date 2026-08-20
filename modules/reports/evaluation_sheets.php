@@ -114,10 +114,14 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
         echo generate_printable_table($selected_olympiad, '', $headers, $data, [
             'signature_text' => 'Atsakingo asmens parašas',
             'signature_name' => '',
-            'include_back_button' => false
+            'include_back_button' => false,
+            // PATAISYTA: puslapio numeris dabar generuojamas VIDUJE generate_printable_table(),
+            // pozicionuojamas prie tikros lapo apačios (žr. config/functions.php), o ne
+            // pridedamas atskirai iškart po lentele.
+            'page_num' => $page_num + 1,
+            'total_pages' => $total_pages
         ], 'evaluation');
         
-        echo '<div style="text-align:center; margin-top:10px;">Puslapis ' . ($page_num + 1) . ' iš ' . $total_pages . '</div>';
         echo '</div>';
     }
     exit; 
