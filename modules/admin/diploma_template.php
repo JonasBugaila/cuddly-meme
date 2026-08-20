@@ -94,11 +94,14 @@ document.addEventListener("DOMContentLoaded", function() {
                 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
                 'insertdatetime', 'media', 'table', 'help', 'wordcount'
             ],
-            toolbar: 'undo redo | insertvars | blocks fontsize | ' +
+            toolbar: 'undo redo | insertvars | newline | blocks fontsize | ' +
                      'bold italic forecolor backcolor | alignleft aligncenter ' +
                      'alignright alignjustify | bullist numlist outdent indent | ' +
                      'image table | removeformat | code fullscreen preview help',
             content_style: 'body { font-family: Helvetica, Arial, sans-serif; font-size: 16px; background-color: #fff; }',
+            // PRIDĖTA: paprastas Enter dabar visada įterpia eilutės lūžį (<br>), o ne
+            // naują pastraipą - žr. paaiškinimą modules/admin/print_template.php faile.
+            newline_behavior: 'linebreak',
             setup: function (editor) {
                 editor.ui.registry.addMenuButton('insertvars', {
                     text: 'Įterpti kintamąjį',
@@ -114,6 +117,17 @@ document.addEventListener("DOMContentLoaded", function() {
                             { type: 'menuitem', text: 'Data', onAction: function () { editor.insertContent(' {DATA} '); } }
                         ];
                         callback(items);
+                    }
+                });
+
+                // PRIDĖTA: aiškus mygtukas naujai eilutei įterpti (žr. paaiškinimą
+                // modules/admin/print_template.php faile)
+                editor.ui.registry.addButton('newline', {
+                    text: 'Nauja eilutė',
+                    tooltip: 'Įterpti naują eilutę (line break) žymeklio vietoje',
+                    onAction: function () {
+                        // SAUGU: tiesioginis turinio įterpimas - patikimiausias metodas
+                        editor.insertContent('<br>');
                     }
                 });
             }

@@ -100,9 +100,15 @@ document.addEventListener("DOMContentLoaded", function() {
                 'anchor', 'searchreplace', 'visualblocks', 'code', 'fullscreen',
                 'insertdatetime', 'media', 'table', 'help', 'wordcount'
             ],
-            toolbar: 'undo redo | insertvars | blocks fontsize | bold italic forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table | code preview',
+            toolbar: 'undo redo | insertvars | newline | blocks fontsize | bold italic forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | table | code preview',
             content_style: 'body { font-family: Helvetica, Arial, sans-serif; font-size: 14px; background-color: #fff; }',
-            
+            // PRIDĖTA: paprastas Enter klavišas dabar visada įterpia eilutės lūžį (<br>),
+            // o ne naują pastraipą (<p>) - trumpiems formatuotiems fragmentams (antraštės,
+            // parašų laukai lentelėse) tai atitinka intuityvų "paspaudžiu Enter - gaunu
+            // naują eilutę" lūkestį ir išsprendžia painiavą su lentelių langeliais, kur
+            // nauja pastraipa dažnai nerodydavo jokio matomo pokyčio.
+            newline_behavior: 'linebreak',
+
             setup: function (editor) {
                 editor.ui.registry.addMenuButton('insertvars', {
                     text: 'Įterpti kintamąjį / eilutę',
@@ -119,6 +125,22 @@ document.addEventListener("DOMContentLoaded", function() {
                             { type: 'menuitem', text: 'Eilutė: Tuščia parašo eilutė', onAction: function () { editor.insertContent('<p>___________________________ &nbsp;&nbsp;&nbsp;&nbsp; ___________________________</p>'); } }
                         ];
                         callback(items);
+                    }
+                });
+
+                // PRIDĖTA: aiškus, visada matomas mygtukas naujai eilutei įterpti -
+                // nepriklauso nuo klaviatūros klavišų elgesio ir veikia bet kurioje
+                // vietoje (įskaitant lentelių langelius, kur Enter klavišas dažnai
+                // "neveikdavo" arba neduodavo jokio matomo rezultato).
+                editor.ui.registry.addButton('newline', {
+                    text: 'Nauja eilutė',
+                    tooltip: 'Įterpti naują eilutę (line break) žymeklio vietoje',
+                    onAction: function () {
+                        // SAUGU: tiesioginis turinio įterpimas per insertContent() yra
+                        // patikimiausias metodas - neveikia priklausomai nuo to, ar
+                        // konkretus komandos pavadinimas (execCommand) atpažįstamas
+                        // šioje HugeRTE versijoje.
+                        editor.insertContent('<br>');
                     }
                 });
             }
