@@ -132,10 +132,10 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     <!-- SLANKIOJANTI DĖLIONĖ (2FA) -->
                     <div class="mb-4">
                         <label class="form-label fw-bold">Saugumo patikra:</label>
-                        <div id="slider-container" style="position: relative; width: 100%; height: 45px; background: #e9ecef; border-radius: 5px; border: 1px solid #ced4da; display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden;">
-                            <div id="slider-text" style="font-size: 14px; color: #6c757d; user-select: none;">Slinkite, kad atrakintumėte</div>
-                            <div id="slider-btn" style="position: absolute; left: 0; width: 50px; height: 43px; background: #0d6efd; border-radius: 4px; cursor: grab; transition: background 0.2s; display: flex; align-items: center; justify-content: center;">
-                                <i class="fas fa-chevron-right" style="color: white;"></i>
+                        <div id="slider-container" class="login-slider">
+                            <div id="slider-text" class="login-slider-text">Slinkite, kad atrakintumėte</div>
+                            <div id="slider-btn" class="login-slider-btn">
+                                <i class="fas fa-chevron-right"></i>
                             </div>
                         </div>
                     </div>
@@ -156,35 +156,54 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
     const sliderText = document.getElementById('slider-text');
     let isDragging = false;
 
-    sliderBtn.onmousedown = function(e) {
-        isDragging = true;
-    };
+    // PATAISYTA: pridėtas prisilietimo (touch) įvykių palaikymas - anksčiau
+    // slankiklis reaguodavo TIK į pelės įvykius (onmousedown/onmousemove/onmouseup),
+    // todėl telefone ar planšetėje jo apskritai nebuvo įmanoma patempti pirštu,
+    // ir prisijungti iš mobilaus įrenginio nebuvo galima. Dabar abu įvykių
+    // rinkiniai (pelė ir prisilietimas) valdomi tomis pačiomis funkcijomis.
 
-    document.onmousemove = function(e) {
+    function getClientX(e) {
+        return (e.touches && e.touches.length > 0) ? e.touches[0].clientX : e.clientX;
+    }
+
+    function startDrag(e) {
+        isDragging = true;
+    }
+
+    function moveDrag(e) {
         if (!isDragging) return;
-        
+        if (e.cancelable) e.preventDefault(); // apsaugo, kad tempimas nepradėtų slinkti puslapio mobiliame
+
         let containerRect = sliderContainer.getBoundingClientRect();
-        let newLeft = e.clientX - containerRect.left - 25; 
+        let newLeft = getClientX(e) - containerRect.left - 25;
 
         if (newLeft < 0) newLeft = 0;
         if (newLeft > containerRect.width - 50) {
             newLeft = containerRect.width - 50;
             isDragging = false;
             loginBtn.disabled = false;
-            sliderBtn.style.background = '#198754';
+            sliderContainer.classList.add('is-complete');
             sliderText.textContent = 'Patvirtinta';
-            sliderText.style.color = 'white';
         }
         sliderBtn.style.left = newLeft + 'px';
-    };
+    }
 
-    document.onmouseup = function() {
+    function endDrag() {
         if (isDragging) {
             isDragging = false;
             if (!loginBtn.disabled) return;
             sliderBtn.style.left = '0px';
         }
-    };
+    }
+
+    sliderBtn.addEventListener('mousedown', startDrag);
+    sliderBtn.addEventListener('touchstart', startDrag, { passive: true });
+
+    document.addEventListener('mousemove', moveDrag);
+    document.addEventListener('touchmove', moveDrag, { passive: false });
+
+    document.addEventListener('mouseup', endDrag);
+    document.addEventListener('touchend', endDrag);
 </script>
 
 <?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>

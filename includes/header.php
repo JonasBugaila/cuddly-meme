@@ -14,13 +14,13 @@ start_session();
 <!DOCTYPE html>
 <html lang="lt">
 <head>
-<!-- Slider Captcha stiliai -->
-<link href="https://cdn.jsdelivr.net/npm/slider-captcha@1.2.3/dist/slidercaptcha.min.css" rel="stylesheet">
-<!-- Slider Captcha skriptas -->
-<script src="https://cdn.jsdelivr.net/npm/slider-captcha@1.2.3/dist/slidercaptcha.min.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo SITE_NAME; ?></title>
+	<!-- ŠRIFTAS: Inter (modernus, aiškiai skaitomas administravimo sistemoms) -->
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 	<!-- BOOTSTRAP CSS -->
     <link rel="stylesheet" href="<?php echo SITE_URL; ?>/assets/css/bootstrap.css">
     <link rel="stylesheet" href="<?php echo SITE_URL; ?>/assets/css/style.css">
@@ -60,6 +60,13 @@ function hexToRgbStr($hex) {
     --info-color: <?php echo $system_theme['info_color']; ?>;
     /* Sukuriame šviesų akcentą kortelėms ir hover efektams iš pagrindinės spalvos */
     --accent-color: rgba(<?php echo hexToRgbStr($system_theme['primary_color']); ?>, 0.08);
+
+    /* PATAISYTA: šie du kintamieji anksčiau NIEKUR nebuvo apibrėžti, todėl
+       žemiau esantis "body, #wrapper" ir "h1-h6" spalvų perrašymas tyliai
+       neveikdavo (CSS ignoruoja deklaraciją su neapibrėžtu var() be atsarginės
+       reikšmės). Dabar teisingai susieta su tais pačiais admin nustatymais. */
+    --theme-body-bg: <?php echo $system_theme['body_bg']; ?>;
+    --theme-text: <?php echo $system_theme['text_color']; ?>;
 
     /* ========================================================= */
     /* 2. BOOTSTRAP 5 IR SISTEMOS BAZINIAI KINTAMIEJI            */
@@ -210,7 +217,12 @@ footer, .footer, .sticky-footer { background-color: var(--theme-footer-bg) !impo
     
     <nav class="nav">
         <div class="container">
-            <ul class="nav-list">
+            <div class="nav-inner">
+                <button type="button" class="nav-toggle" id="navToggle" aria-expanded="false" aria-controls="mainNavList" aria-label="Atidaryti meniu">
+                    <i class="fas fa-bars"></i>
+                    <span>Meniu</span>
+                </button>
+                <ul class="nav-list" id="mainNavList">
                 <li class="nav-item">
                     <a href="<?php echo SITE_URL; ?>" class="nav-link <?php echo (current_url() == SITE_URL || current_url() == SITE_URL . '/') ? 'active' : ''; ?>">Pradžia</a>
                 </li>
@@ -244,9 +256,32 @@ footer, .footer, .sticky-footer { background-color: var(--theme-footer-bg) !impo
                         </li>
                     <?php endif; ?>
                 <?php endif; ?>
-            </ul>
+                </ul>
+            </div>
         </div>
     </nav>
+
+    <script>
+    // NAUJA: mobilaus meniu perjungiklis - iki šiol nav-list tiesiog susispausdavo
+    // kelias eilutes ankštame ekrane, dabar ties 768px slenksčiu paslepiamas ir
+    // atidaromas per mygtuką (žr. CSS .nav-toggle / .nav-list.open).
+    document.addEventListener('DOMContentLoaded', function () {
+        var toggle = document.getElementById('navToggle');
+        var list = document.getElementById('mainNavList');
+        if (!toggle || !list) return;
+        toggle.addEventListener('click', function () {
+            var isOpen = list.classList.toggle('open');
+            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+        // Uždarome meniu pasirinkus nuorodą (mobiliame rodinyje)
+        list.querySelectorAll('.nav-link').forEach(function (link) {
+            link.addEventListener('click', function () {
+                list.classList.remove('open');
+                toggle.setAttribute('aria-expanded', 'false');
+            });
+        });
+    });
+    </script>
     
     <main class="main">
         <div class="container">

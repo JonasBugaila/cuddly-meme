@@ -484,15 +484,18 @@ function get_print_layout() {
 
 function get_system_theme() {
     $theme_file = dirname(dirname(__FILE__)) . '/config/theme.json';
+    // PATAISYTA (modernizavimas): atnaujinta numatytoji paletė - Indigo/Slate,
+    // atitinkanti šiuolaikinių administravimo sistemų dizaino standartus.
+    // Administratorius bet kada gali pakeisti per admin/theme_settings.php.
     $default_theme = [
-        'primary_color'       => '#4e73df', 'secondary_color'     => '#858796', 'success_color'       => '#1cc88a',
-        'info_color'          => '#36b9cc', 'warning_color'       => '#f6c23e', 'danger_color'        => '#e74a3b',
-        'body_bg'             => '#f8f9fc', 'text_color'          => '#5a5c69', 'topbar_bg'           => '#ffffff',
-        'topbar_text'         => '#858796', 'topbar_hover'        => '#4e73df', 'sidebar_bg'          => '#4e73df',
-        'sidebar_text'        => '#ffffff', 'sidebar_hover_bg'    => '#2e59d9', 'sidebar_active_bg'   => '#ffffff',
-        'sidebar_active_text' => '#4e73df', 'card_bg'             => '#ffffff', 'card_header_bg'      => '#f8f9fc',
-        'card_border'         => '#e3e6f0', 'table_header_bg'     => '#f8f9fc', 'table_header_text'   => '#5a5c69',
-        'footer_bg'           => '#ffffff', 'footer_text'         => '#858796', 'logo_path'           => 'assets/img/logo.png',
+        'primary_color'       => '#4f46e5', 'secondary_color'     => '#64748b', 'success_color'       => '#16a34a',
+        'info_color'          => '#0891b2', 'warning_color'       => '#f59e0b', 'danger_color'        => '#dc2626',
+        'body_bg'             => '#f8fafc', 'text_color'          => '#1e293b', 'topbar_bg'           => '#ffffff',
+        'topbar_text'         => '#64748b', 'topbar_hover'        => '#4f46e5', 'sidebar_bg'          => '#4f46e5',
+        'sidebar_text'        => '#ffffff', 'sidebar_hover_bg'    => '#4338ca', 'sidebar_active_bg'   => '#ffffff',
+        'sidebar_active_text' => '#4f46e5', 'card_bg'             => '#ffffff', 'card_header_bg'      => '#fbfcfe',
+        'card_border'         => '#e2e8f0', 'table_header_bg'     => '#f8fafc', 'table_header_text'   => '#64748b',
+        'footer_bg'           => '#ffffff', 'footer_text'         => '#64748b', 'logo_path'           => 'assets/img/logo.png',
         'logo_width'          => '150px'
     ];
 

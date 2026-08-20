@@ -45,54 +45,38 @@ require_once __DIR__ . '/includes/header.php';
 
     <div class="row mb-4 g-3">
         <div class="col-xl-3 col-md-6">
-            <div class="card border-start border-primary border-4 shadow-sm h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Visos Olimpiados</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $stats['olympiads']; ?></div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-trophy fa-2x text-gray-300" style="color: #dddddd;"></i></div>
-                    </div>
+            <div class="stat-card">
+                <div class="stat-card-icon is-primary"><i class="fas fa-trophy"></i></div>
+                <div>
+                    <div class="stat-card-label">Visos Olimpiados</div>
+                    <div class="stat-card-value"><?php echo $stats['olympiads']; ?></div>
                 </div>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
-            <div class="card border-start border-success border-4 shadow-sm h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Aktyvios Olimpiados</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $stats['active']; ?></div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-check-circle fa-2x text-gray-300" style="color: #dddddd;"></i></div>
-                    </div>
+            <div class="stat-card">
+                <div class="stat-card-icon is-success"><i class="fas fa-check-circle"></i></div>
+                <div>
+                    <div class="stat-card-label">Aktyvios Olimpiados</div>
+                    <div class="stat-card-value"><?php echo $stats['active']; ?></div>
                 </div>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
-            <div class="card border-start border-info border-4 shadow-sm h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Registruoti Dalyviai</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $stats['participants']; ?></div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-users fa-2x text-gray-300" style="color: #dddddd;"></i></div>
-                    </div>
+            <div class="stat-card">
+                <div class="stat-card-icon is-info"><i class="fas fa-users"></i></div>
+                <div>
+                    <div class="stat-card-label">Registruoti Dalyviai</div>
+                    <div class="stat-card-value"><?php echo $stats['participants']; ?></div>
                 </div>
             </div>
         </div>
         <div class="col-xl-3 col-md-6">
-            <div class="card border-start border-warning border-4 shadow-sm h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Sistemos Mokyklos</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800"><?php echo $stats['schools']; ?></div>
-                        </div>
-                        <div class="col-auto"><i class="fas fa-school fa-2x text-gray-300" style="color: #dddddd;"></i></div>
-                    </div>
+            <div class="stat-card">
+                <div class="stat-card-icon is-warning"><i class="fas fa-school"></i></div>
+                <div>
+                    <div class="stat-card-label">Sistemos Mokyklos</div>
+                    <div class="stat-card-value"><?php echo $stats['schools']; ?></div>
                 </div>
             </div>
         </div>
