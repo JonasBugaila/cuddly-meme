@@ -31,6 +31,9 @@ if (isset($_GET['delete']) && !empty($_GET['delete'])) {
     $olympiad = db_get_row($stmt);
     
     if ($olympiad) {
+        // NAUJA: fiksuojame trynimo veiksmą bendrame sistemos žurnale PRIEŠ patį trynimą
+        log_action('Olimpiados pašalinimas', "Pašalinta olimpiada: \"{$olympiad['konkurso_pav']}\" (ID: {$olympiad_id})");
+
         // Šaliname olimpiadą
         $sql = "DELETE FROM konkursai WHERE konk_id = ?";
         $stmt = db_query($sql, [$olympiad_id]);

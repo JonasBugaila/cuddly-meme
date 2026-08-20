@@ -1,0 +1,23 @@
+# Niekada neįtraukti backup/redagavimo failų (praeityje sukėlė realaus DB slaptažodžio nutekėjimą)
+*.bak
+*.bakV1
+*.bakV2
+*.orig
+*~
+
+# Klaidų žurnalai
+logs/*.log
+!logs/.htaccess
+!logs/.gitkeep
+
+# Aplinkos/konfigūracijos failai su paslaptimis (real .env NIEKADA nesiunčiamas į git)
+.env
+.env.local
+.env.production
+!.env.example
+
+# IDE/OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

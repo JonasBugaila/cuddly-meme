@@ -26,7 +26,27 @@ function start_session() {
         }
         ini_set('session.cookie_httponly', 1);
         ini_set('session.use_only_cookies', 1);
+
+        // SAUGU: sesijos gyvavimo trukmės apribojimas. Bendro naudojimo
+        // kompiuteriuose (pvz. mokyklos raštinėje) sesija neturėtų likti
+        // aktyvi neribotai ilgai po to, kai vartotojas nustoja ją naudoti.
+        $session_lifetime = 15 * 60; // 15 minučių neaktyvumo (suderinta su footer.php JS logout laikmačiu)
+        ini_set('session.gc_maxlifetime', $session_lifetime);
+        session_set_cookie_params($session_lifetime);
+
         session_start();
+
+        // Tikriname, ar sesija neviršijo leistino neaktyvumo laiko
+        if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > $session_lifetime) {
+            $_SESSION = [];
+            if (ini_get('session.use_cookies')) {
+                $params = session_get_cookie_params();
+                setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'], $params['httponly']);
+            }
+            session_destroy();
+            session_start();
+        }
+        $_SESSION['last_activity'] = time();
     }
 }
 

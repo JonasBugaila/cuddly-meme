@@ -26,7 +26,7 @@ if (isset($_GET['delete']) && !empty($_GET['delete'])) {
     $school_id = sanitize_input($_GET['delete']);
     
     // Tikriname, ar mokykla egzistuoja
-    $sql = "SELECT mokyklos_id FROM mokyklos WHERE mokyklos_id = ?";
+    $sql = "SELECT mokyklos_id, pavadinimas FROM mokyklos WHERE mokyklos_id = ?";
     $stmt = db_query($sql, [$school_id], 'i');
     $school = db_get_row($stmt);
     
@@ -43,6 +43,10 @@ if (isset($_GET['delete']) && !empty($_GET['delete'])) {
         if ($user_count > 0 || $participant_count > 0) {
             set_message('Negalima pašalinti mokyklos, nes ji susieta su vartotojais arba dalyviais', 'error');
         } else {
+            // NAUJA: fiksuojame trynimo veiksmą bendrame sistemos žurnale PRIEŠ patį trynimą,
+            // kol dar turime mokyklos pavadinimą po ranka.
+            log_action('Mokyklos pašalinimas', "Pašalinta mokykla: \"{$school['pavadinimas']}\" (ID: {$school_id})");
+
             // Šaliname mokyklą
             $sql = "DELETE FROM mokyklos WHERE mokyklos_id = ?";
             $stmt = db_query($sql, [$school_id], 'i');

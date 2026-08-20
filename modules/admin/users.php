@@ -15,6 +15,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     if (verify_csrf_token($_POST['csrf_token'])) {
         $user_id = sanitize_input($_POST['user_id']);
         if ($user_id !== $_SESSION['user_id']) {
+            // NAUJA: fiksuojame trynimo veiksmą bendrame sistemos žurnale PRIEŠ patį trynimą
+            $deleted_user = db_get_row(db_query("SELECT var_vardas, var_pavarde FROM vartotojas WHERE vart_id = ?", [$user_id], 's'));
+            $deleted_name = $deleted_user ? ($deleted_user['var_vardas'] . ' ' . $deleted_user['var_pavarde']) : 'nežinomas';
+            log_action('Vartotojo pašalinimas', "Pašalintas vartotojas: {$deleted_name} (ID: {$user_id})");
+
             db_query("DELETE FROM vartotojas WHERE vart_id = ?", [$user_id], 's');
             set_message('Vartotojas sėkmingai pašalintas', 'success');
         }

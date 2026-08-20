@@ -33,6 +33,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if ($stmt) {
             $user = db_get_row($stmt);
+
+            // SAUGU: apsauga nuo brute-force atakų. Jei paskyra šiuo metu užrakinta
+            // dėl per daug nesėkmingų bandymų, atsisakome tikrinti slaptažodį iš viso.
+            if ($user && !empty($user['locked_until']) && strtotime($user['locked_until']) > time()) {
+                $minutes_left = ceil((strtotime($user['locked_until']) - time()) / 60);
+                set_message("Paskyra laikinai užrakinta dėl per daug nesėkmingų bandymų. Bandykite dar kartą po {$minutes_left} min.", 'error');
+                $user = null; // neleidžiame toliau tikrinti slaptažodžio
+            }
             
             if ($user) {
                 $is_valid = false;
@@ -51,6 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($needs_rehash) {
                         $new_hash = hash_password($password);
                         db_update('vartotojas', ['var_slapt' => $new_hash], "vart_id = ?", [$user['vart_id']]);
+                    }
+
+                    // SAUGU: sėkmingas prisijungimas atstato nesėkmingų bandymų skaitiklį
+                    if (!empty($user['failed_attempts']) || !empty($user['locked_until'])) {
+                        db_update('vartotojas', ['failed_attempts' => 0, 'locked_until' => null], "vart_id = ?", [$user['vart_id']]);
                     }
 
                     start_session();
@@ -72,9 +85,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     redirect(SITE_URL);
                     exit;
                 } else {
-                    set_message('Neteisingas vartotojo vardas arba slaptažodis', 'error');
+                    // SAUGU: nesėkmingas bandymas - didiname skaitiklį, po 5 bandymų užrakiname 15 min.
+                    $new_failed_attempts = (int)($user['failed_attempts'] ?? 0) + 1;
+                    $update_data = ['failed_attempts' => $new_failed_attempts];
+                    if ($new_failed_attempts >= 5) {
+                        $update_data['locked_until'] = date('Y-m-d H:i:s', time() + 900);
+                        log_action('Saugumo pažeidimas', "Paskyra '{$username}' užrakinta po {$new_failed_attempts} nesėkmingų prisijungimo bandymų.");
+                        set_message('Per daug nesėkmingų bandymų. Paskyra užrakinta 15 minučių.', 'error');
+                    } else {
+                        set_message('Neteisingas vartotojo vardas arba slaptažodis', 'error');
+                    }
+                    db_update('vartotojas', $update_data, 'vart_id = ?', [$user['vart_id']]);
                 }
-            } else {
+            } elseif (!isset($_SESSION['message'])) {
+                // Bendra klaida, kad neatskleistume, ar vartotojo ID egzistuoja (username enumeration apsauga)
                 set_message('Neteisingas vartotojo vardas arba slaptažodis', 'error');
             }
         }

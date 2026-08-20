@@ -7,10 +7,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
-$sql = "SELECT mokyklos_id, pavadinimas FROM mokyklos ORDER BY pavadinimas ASC";
-$stmt = db_query($sql);
-$schools = db_get_results($stmt);
-
+// SAUGU: teisių patikra perkelta į patį pradžią, prieš bet kokį DB užklausimą
 if (!is_logged_in()) {
     set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
     redirect(SITE_URL . '/modules/auth/login.php');
@@ -20,6 +17,10 @@ if (!is_logged_in()) {
     redirect(SITE_URL);
     exit;
 }
+
+$sql = "SELECT mokyklos_id, pavadinimas FROM mokyklos ORDER BY pavadinimas ASC";
+$stmt = db_query($sql);
+$schools = db_get_results($stmt);
 
 if (!isset($_GET['id']) || empty($_GET['id'])) {
     set_message('Nenurodytas vartotojo ID. Prašome pasirinkti vartotoją iš sąrašo.', 'error');
@@ -41,6 +42,17 @@ if (!$user) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'])) {
     $errors = [];
     $post_user_id = sanitize_input($_POST['user_id']);
+
+    // SAUGU (IDOR apsauga): atnaujinamas vartotojas visada nustatomas pagal GET
+    // parametrą "id" (jau patikrintą ir egzistuojantį DB - žr. eilutę 30-39 aukščiau),
+    // o ne pagal paslėptą POST lauką, kurį galima suklastoti naršyklės įrankiais
+    // ir taip redaguoti kitą, nei rodomas ekrane, vartotoją.
+    if ($post_user_id !== $user_id) {
+        log_action('Saugumo pažeidimas', "Bandyta redaguoti vartotoją '{$post_user_id}' per suklastotą formą (GET id='{$user_id}').");
+        set_message('Saugumo klaida: neatitinka redaguojamas vartotojas. Bandykite dar kartą.', 'error');
+        redirect(SITE_URL . '/modules/admin/users.php');
+        exit;
+    }
     
     if (!isset($_POST['csrf_token']) || !verify_csrf_token($_POST['csrf_token'])) {
         set_message('Netinkamas CSRF žetonas. Saugumo sumetimais bandykite dar kartą.', 'error');
@@ -66,8 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'])) {
     if (!in_array($tipas, ['user', 'admin'])) $errors[] = 'Neteisinga rolė';
     
     $slaptazodis = $_POST['slaptazodis'] ?? '';
-    if (!empty($slaptazodis) && strlen($slaptazodis) < 6) {
-        $errors[] = 'Naujas slaptažodis turi būti bent 6 simbolių ilgio';
+    if (!empty($slaptazodis) && strlen($slaptazodis) < 10) {
+        $errors[] = 'Naujas slaptažodis turi būti bent 10 simbolių ilgio';
     }
     
     if (empty($errors)) {
@@ -82,18 +94,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'])) {
         $password_changed = false;
         if (!empty($slaptazodis)) {
             $data['var_slapt'] = hash_password($slaptazodis);
-            $data['must_change_password'] = 1; 
+            $data['must_change_password'] = 1;
+            // SAUGU: slaptažodžio keitimo metu atstatome ir brute-force skaitiklius,
+            // kad administratoriaus priskirtas naujas slaptažodis nebūtų iškart užrakintas.
+            $data['failed_attempts'] = 0;
+            $data['locked_until'] = null;
             $password_changed = true;
         }
         
-        $result = db_update('vartotojas', $data, 'vart_id = ?', [$post_user_id]);
+        $result = db_update('vartotojas', $data, 'vart_id = ?', [$user_id]);
         
         if ($result) {
             if ($password_changed) {
                 // Išsaugome sesiją PDF generavimui
                 $_SESSION['flash_credentials'] = [
                     'vardas_pavarde' => $vardas . ' ' . $pavarde,
-                    'vart_id' => $post_user_id,
+                    'vart_id' => $user_id,
                     'password' => $slaptazodis
                 ];
                 set_message('Vartotojas sėkmingai atnaujintas.', 'success');
@@ -101,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_id'])) {
                 set_message('Vartotojo duomenys sėkmingai atnaujinti.', 'success');
             }
             
-            redirect(SITE_URL . '/modules/admin/user_edit.php?id=' . urlencode($post_user_id));
+            redirect(SITE_URL . '/modules/admin/user_edit.php?id=' . urlencode($user_id));
             exit;
         } else {
             global $conn;
@@ -202,7 +218,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <div class="form-group mb-0">
                                     <label for="slaptazodis" class="form-label fw-bold text-dark">Naujas slaptažodis</label>
                                     <div class="input-group">
-                                        <input type="text" class="form-control border-warning" id="slaptazodis" name="slaptazodis" minlength="6" placeholder="Palikite tuščią, jei nenorite keisti">
+                                        <input type="text" class="form-control border-warning" id="slaptazodis" name="slaptazodis" minlength="10" placeholder="Palikite tuščią, jei nenorite keisti">
                                         <button class="btn btn-warning fw-bold text-dark" type="button" onclick="generatePassword()">Generuoti</button>
                                     </div>
                                     <small class="text-muted mt-1 d-block">Sukūrę naują slaptažodį, galėsite jį atspausdinti PDF formatu. Vartotojas privalės jį pasikeisti.</small>
@@ -222,11 +238,15 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
 
 <script>
 function generatePassword() {
-    var length = 10,
+    // SAUGU: crypto.getRandomValues() naudoja kriptografiškai saugų atsitiktinių
+    // skaičių generatorių, o ne Math.random() (kuris nėra saugus slaptažodžiams).
+    var length = 12,
         charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*",
-        retVal = "";
-    for (var i = 0, n = charset.length; i < length; ++i) {
-        retVal += charset.charAt(Math.floor(Math.random() * n));
+        retVal = "",
+        randomValues = new Uint32Array(length);
+    crypto.getRandomValues(randomValues);
+    for (var i = 0; i < length; i++) {
+        retVal += charset.charAt(randomValues[i] % charset.length);
     }
     document.getElementById("slaptazodis").value = retVal;
 }

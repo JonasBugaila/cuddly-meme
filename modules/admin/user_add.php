@@ -7,11 +7,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
 
-// Gauname mokyklų sąrašą
-$sql = "SELECT mokyklos_id, pavadinimas FROM mokyklos ORDER BY pavadinimas ASC";
-$stmt = db_query($sql);
-$schools = db_get_results($stmt);
-
+// SAUGU: teisių patikra perkelta į patį pradžią, prieš bet kokį DB užklausimą
 if (!is_logged_in()) {
     set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
     redirect(SITE_URL . '/modules/auth/login.php');
@@ -21,6 +17,11 @@ if (!is_logged_in()) {
     redirect(SITE_URL);
     exit;
 }
+
+// Gauname mokyklų sąrašą
+$sql = "SELECT mokyklos_id, pavadinimas FROM mokyklos ORDER BY pavadinimas ASC";
+$stmt = db_query($sql);
+$schools = db_get_results($stmt);
 
 // Apdorojame formą
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -57,8 +58,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $plain_password = $_POST['slaptazodis'] ?? '';
     if (empty($plain_password)) {
         $errors[] = 'Prašome įvesti slaptažodį';
-    } elseif (strlen($plain_password) < 6) {
-        $errors[] = 'Slaptažodis turi būti bent 6 simbolių ilgio';
+    } elseif (strlen($plain_password) < 10) {
+        $errors[] = 'Slaptažodis turi būti bent 10 simbolių ilgio';
     }
     
     $sql = "SELECT vart_id FROM vartotojas WHERE el_pastas = ?";
@@ -204,7 +205,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                 <div class="form-group mb-0">
                                     <label for="slaptazodis" class="form-label fw-bold text-dark">Laikinas slaptažodis *</label>
                                     <div class="input-group">
-                                        <input type="text" class="form-control border-warning" id="slaptazodis" name="slaptazodis" required minlength="6">
+                                        <input type="text" class="form-control border-warning" id="slaptazodis" name="slaptazodis" required minlength="10">
                                         <button class="btn btn-warning fw-bold text-dark" type="button" onclick="generatePassword()">Generuoti</button>
                                     </div>
                                     <small class="text-muted mt-1 d-block">Šį slaptažodį galėsite atspausdinti PDF formatu po sukūrimo.</small>
@@ -258,11 +259,15 @@ document.getElementById('vardas').addEventListener('input', generateUserId);
 document.getElementById('pavarde').addEventListener('input', generateUserId);
 
 function generatePassword() {
-    var length = 10,
+    // SAUGU: crypto.getRandomValues() naudoja kriptografiškai saugų atsitiktinių
+    // skaičių generatorių, o ne Math.random() (kuris nėra saugus slaptažodžiams).
+    var length = 12,
         charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*",
-        retVal = "";
-    for (var i = 0, n = charset.length; i < length; ++i) {
-        retVal += charset.charAt(Math.floor(Math.random() * n));
+        retVal = "",
+        randomValues = new Uint32Array(length);
+    crypto.getRandomValues(randomValues);
+    for (var i = 0; i < length; i++) {
+        retVal += charset.charAt(randomValues[i] % charset.length);
     }
     document.getElementById("slaptazodis").value = retVal;
 }

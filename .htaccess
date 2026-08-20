@@ -1,0 +1,26 @@
+# Išjungiame katalogų naršymą
+Options -Indexes
+
+# Apsauga nuo tiesioginės prieigos prie jautrių failų
+<FilesMatch "\.(php\.bak|env|sql|txt|json|md|log|ini|sh|bak|backup|kopija|bakV1|bakV2)$">
+    <IfModule !mod_authz_core.c>
+        Order Allow,Deny
+        Deny from all
+    </IfModule>
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+</FilesMatch>
+
+# Priverstinis HTTPS ir jautrių katalogų blokavimas
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    RewriteCond %{HTTPS} off
+    RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    RewriteRule ^config/(.*)$ - [F,L]
+    RewriteRule ^vendor/(.*)$ - [F,L]
+    RewriteRule ^includes/(.*)$ - [F,L]
+    RewriteRule ^sql_migrations/(.*)$ - [F,L]
+</IfModule>
