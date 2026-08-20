@@ -1,0 +1,457 @@
+diff --git a/modules/admin/classes.php b/modules/admin/classes.php
+new file mode 100644
+index 0000000..df67fa6
+--- /dev/null
++++ b/modules/admin/classes.php
+@@ -0,0 +1,213 @@
++<?php
++/**
++ * Klasių valdymo puslapis (Administravimas)
++ *
++ * Leidžia administratoriui pridėti, redaguoti ir šalinti klases, kurios
++ * naudojamos kaip pasirenkamas sąrašas registruojant dalyvius
++ * (modules/registration/register.php, edit_participant.php, admin/participant_edit.php
++ * visos šią lentelę skaito tiesiogiai - pakeitimai čia iškart atsispindi visur).
++ *
++ * PASTABA: dalyviai.1_klase saugo klasės PAVADINIMĄ kaip tekstą (kopija
++ * registracijos metu), o ne nuorodą į šios lentelės ID - todėl klasės
++ * pervadinimas ar pašalinimas NEPALIEČIA jau egzistuojančių dalyvių įrašų
++ * (skirtingai nei mokyklos/olimpiados pavadinimas, kurie veikia kaip
++ * "nuoroda" per tekstą - žr. school_edit.php/olympiad_edit.php cascade logiką).
++ */
++
++require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
++require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
++require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
++
++if (!is_logged_in()) {
++    set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
++    redirect(SITE_URL . '/modules/auth/login.php');
++    exit;
++}
++if (!is_admin()) {
++    log_action('Saugumo pažeidimas', 'Bandyta pasiekti klasių valdymą be admin teisių.');
++    set_message('Neturite teisių pasiekti šį puslapį', 'error');
++    redirect(SITE_URL);
++    exit;
++}
++
++// ---------------------------------------------------------
++// PRIDĖTI NAUJĄ KLASĘ
++// ---------------------------------------------------------
++if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['add_class'])) {
++    if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
++        set_message('Netinkamas saugumo žetonas.', 'error');
++        redirect(SITE_URL . '/modules/admin/classes.php');
++        exit;
++    }
++
++    $new_class = trim(sanitize_input($_POST['klases'] ?? ''));
++
++    if ($new_class === '') {
++        set_message('Prašome įvesti klasės pavadinimą.', 'error');
++    } elseif (mb_strlen($new_class, 'UTF-8') > 10) {
++        set_message('Klasės pavadinimas negali būti ilgesnis nei 10 simbolių.', 'error');
++    } else {
++        // SAUGU: patikra dėl dublikatų prieš įrašant (klases lentelė neturi DB lygio
++        // UNIQUE apribojimo, todėl tikriname aplikacijos pusėje)
++        $existing = db_get_row(db_query("SELECT klases_id FROM klases WHERE klases = ?", [$new_class], 's'));
++        if ($existing) {
++            set_message("Klasė \"{$new_class}\" jau egzistuoja.", 'error');
++        } else {
++            $result = db_insert('klases', ['klases' => $new_class]);
++            if ($result) {
++                log_action('Klasės pridėjimas', "Pridėta nauja klasė: \"{$new_class}\"");
++                set_message("Klasė \"{$new_class}\" sėkmingai pridėta.", 'success');
++            } else {
++                set_message('Klaida pridedant klasę.', 'error');
++            }
++        }
++    }
++    redirect(SITE_URL . '/modules/admin/classes.php');
++    exit;
++}
++
++// ---------------------------------------------------------
++// REDAGUOTI (PERVADINTI) KLASĘ
++// ---------------------------------------------------------
++if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['edit_class'])) {
++    if (!verify_csrf_token($_POST['csrf_token'] ?? '')) {
++        set_message('Netinkamas saugumo žetonas.', 'error');
++        redirect(SITE_URL . '/modules/admin/classes.php');
++        exit;
++    }
++
++    $class_id = (int)($_POST['klases_id'] ?? 0);
++    $new_name = trim(sanitize_input($_POST['klases'] ?? ''));
++
++    if ($class_id <= 0 || $new_name === '') {
++        set_message('Neteisingi duomenys redagavimui.', 'error');
++    } elseif (mb_strlen($new_name, 'UTF-8') > 10) {
++        set_message('Klasės pavadinimas negali būti ilgesnis nei 10 simbolių.', 'error');
++    } else {
++        $existing = db_get_row(db_query("SELECT klases_id FROM klases WHERE klases = ? AND klases_id != ?", [$new_name, $class_id], 'si'));
++        if ($existing) {
++            set_message("Klasė \"{$new_name}\" jau egzistuoja.", 'error');
++        } else {
++            $old_row = db_get_row(db_query("SELECT klases FROM klases WHERE klases_id = ?", [$class_id], 'i'));
++            $result = db_update('klases', ['klases' => $new_name], 'klases_id = ?', [$class_id]);
++            if ($result) {
++                $old_name = $old_row['klases'] ?? '?';
++                log_action('Klasės redagavimas', "Klasė pervadinta iš \"{$old_name}\" į \"{$new_name}\" (ID: {$class_id}). Ankstesnių dalyvių įrašai nekeičiami.");
++                set_message('Klasė sėkmingai atnaujinta.', 'success');
++            } else {
++                set_message('Klaida atnaujinant klasę.', 'error');
++            }
++        }
++    }
++    redirect(SITE_URL . '/modules/admin/classes.php');
++    exit;
++}
++
++// ---------------------------------------------------------
++// ŠALINTI KLASĘ
++// ---------------------------------------------------------
++if (isset($_GET['delete']) && !empty($_GET['delete'])) {
++    if (!verify_csrf_token($_GET['csrf_token'] ?? '')) {
++        set_message('Netinkamas saugumo žetonas.', 'error');
++        redirect(SITE_URL . '/modules/admin/classes.php');
++        exit;
++    }
++
++    $class_id = (int)$_GET['delete'];
++    $class_row = db_get_row(db_query("SELECT klases FROM klases WHERE klases_id = ?", [$class_id], 'i'));
++
++    if ($class_row) {
++        // INFORMACINIS: rodome, kiek istorinių dalyvių įrašų naudoja šį pavadinimą,
++        // bet NEBLOKUOJAME trynimo - dalyviai.1_klase yra atskira teksto kopija,
++        // trynimas iš šio sąrašo nekeičia ir "nesugadina" jokių esamų įrašų.
++        db_query("DELETE FROM klases WHERE klases_id = ?", [$class_id], 'i');
++        log_action('Klasės pašalinimas', "Pašalinta klasė: \"{$class_row['klases']}\" (ID: {$class_id})");
++        set_message("Klasė \"{$class_row['klases']}\" pašalinta.", 'success');
++    } else {
++        set_message('Klasė nerasta.', 'error');
++    }
++    redirect(SITE_URL . '/modules/admin/classes.php');
++    exit;
++}
++
++// ---------------------------------------------------------
++// SĄRAŠAS
++// ---------------------------------------------------------
++$classes = db_get_results(db_query("SELECT klases_id, klases FROM klases ORDER BY klases ASC"));
++
++// Kiek dalyvių istoriškai naudoja kiekvieną klasės pavadinimą (informacinis stulpelis)
++$usage_counts = [];
++$usage_rows = db_get_results(db_query("SELECT `1_klase`, COUNT(*) as cnt FROM dalyviai GROUP BY `1_klase`"));
++foreach ($usage_rows as $row) {
++    $usage_counts[$row['1_klase']] = $row['cnt'];
++}
++
++require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
++?>
++
++<div class="row">
++    <div class="col-12">
++        <div class="card">
++            <div class="card-header d-flex justify-content-between align-items-center">
++                <h1>Klasių valdymas</h1>
++                <a href="<?php echo SITE_URL; ?>/modules/admin/index.php" class="btn btn-secondary btn-sm">Grįžti</a>
++            </div>
++            <div class="card-body">
++                <?php display_message(); ?>
++
++                <form method="post" action="" class="row g-2 align-items-end mb-4 bg-light p-3 rounded border">
++                    <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
++                    <div class="col-md-4">
++                        <label class="form-label fw-bold">Nauja klasė</label>
++                        <input type="text" name="klases" class="form-control" maxlength="10" placeholder="pvz. 8a" required>
++                    </div>
++                    <div class="col-md-3">
++                        <button type="submit" name="add_class" class="btn btn-success"><i class="fas fa-plus"></i> Pridėti</button>
++                    </div>
++                </form>
++
++                <?php if (!empty($classes)): ?>
++                    <div class="table-responsive">
++                        <table class="table table-striped table-hover align-middle">
++                            <thead class="table-light">
++                                <tr>
++                                    <th>ID</th>
++                                    <th>Klasė</th>
++                                    <th>Naudota dalyvių įrašuose</th>
++                                    <th class="text-end">Veiksmai</th>
++                                </tr>
++                            </thead>
++                            <tbody>
++                                <?php foreach ($classes as $class): ?>
++                                    <tr>
++                                        <td class="text-muted"><?php echo (int)$class['klases_id']; ?></td>
++                                        <td>
++                                            <form method="post" action="" class="d-flex gap-2 align-items-center">
++                                                <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
++                                                <input type="hidden" name="klases_id" value="<?php echo (int)$class['klases_id']; ?>">
++                                                <input type="text" name="klases" value="<?php echo htmlspecialchars($class['klases']); ?>" maxlength="10" class="form-control form-control-sm" style="max-width: 120px;">
++                                                <button type="submit" name="edit_class" class="btn btn-sm btn-outline-primary"><i class="fas fa-save"></i></button>
++                                            </form>
++                                        </td>
++                                        <td class="text-muted"><?php echo (int)($usage_counts[$class['klases']] ?? 0); ?></td>
++                                        <td class="text-end">
++                                            <a href="<?php echo SITE_URL; ?>/modules/admin/classes.php?delete=<?php echo (int)$class['klases_id']; ?>&csrf_token=<?php echo urlencode(generate_csrf_token()); ?>"
++                                               class="btn btn-sm btn-danger"
++                                               onclick="return confirm('Ar tikrai norite pašalinti šią klasę iš sąrašo? Tai NEPALIES jau egzistuojančių dalyvių įrašų, tik nebebus siūloma registruojant naujus.');">
++                                                <i class="fas fa-trash"></i> Šalinti
++                                            </a>
++                                        </td>
++                                    </tr>
++                                <?php endforeach; ?>
++                            </tbody>
++                        </table>
++                    </div>
++                <?php else: ?>
++                    <div class="alert alert-info">Klasių sąrašas tuščias.</div>
++                <?php endif; ?>
++            </div>
++        </div>
++    </div>
++</div>
++
++<?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>
+diff --git a/modules/admin/index.php b/modules/admin/index.php
+index 244523c..9073e8d 100644
+--- a/modules/admin/index.php
++++ b/modules/admin/index.php
+@@ -66,6 +66,17 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
+                             </div>
+                         </div>
+                     </div>
++                    <div class="col-md-4">
++                        <div class="card admin-card mb-4">
++                            <div class="card-header">
++                                <h3>Klasių valdymas</h3>
++                            </div>
++                            <div class="card-body">
++                                <p>Klasių sąrašo pridėjimas, redagavimas ir šalinimas.</p>
++                                <a href="<?php echo SITE_URL; ?>/modules/admin/classes.php" class="btn btn-primary">Klasių valdymas</a>
++                            </div>
++                        </div>
++                    </div>
+                 </div>
+                 <div class="row">
+                     <div class="col-md-4">
+diff --git a/modules/registration/edit_participant.php b/modules/registration/edit_participant.php
+index 6f4fd0f..9a29982 100644
+--- a/modules/registration/edit_participant.php
++++ b/modules/registration/edit_participant.php
+@@ -46,6 +46,18 @@ if (!is_admin()) {
+         redirect(SITE_URL . '/modules/registration/my_students.php');
+         exit;
+     }
++
++    // NAUJA: mokytojas gali redaguoti dalyvio informaciją TIK kol olimpiada aktyvi
++    // (konkursai.status = 0). Administratorius šio apribojimo neturi - gali redaguoti
++    // visada, taip pat ir po olimpiados pabaigos (pvz. taisant klaidą po rezultatų paskelbimo).
++    $oly_status_row = db_get_row(db_query("SELECT status FROM konkursai WHERE konkurso_pav = ?", [$participant['konkurso_pav']], 's'));
++    $olympiad_is_active = $oly_status_row && (int)$oly_status_row['status'] === 0;
++
++    if (!$olympiad_is_active) {
++        set_message('Ši olimpiada nebeaktyvi - dalyvio informaciją gali redaguoti tik administratorius.', 'error');
++        redirect(SITE_URL . '/modules/registration/my_students.php');
++        exit;
++    }
+ }
+ 
+ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+diff --git a/modules/registration/my_students.php b/modules/registration/my_students.php
+index 6aa8846..0b1c5af 100644
+--- a/modules/registration/my_students.php
++++ b/modules/registration/my_students.php
+@@ -24,11 +24,12 @@ $offset = ($page - 1) * $limit;
+ 
+ $search = isset($_GET['q']) ? sanitize_input($_GET['q']) : '';
+ 
++$where_clauses = [];
+ $params = [];
+ $types = '';
+ 
+ if (is_admin()) {
+-    $where = "WHERE 1=1";
++    $where_clauses[] = '1=1';
+ } else {
+     $own_school_row = db_get_row(db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's'));
+     $own_school = $own_school_row['var_mokykla'] ?? '';
+@@ -38,13 +39,15 @@ if (is_admin()) {
+         redirect(SITE_URL);
+     }
+ 
+-    $where = "WHERE var_mokykla = ?";
++    $where_clauses[] = 'd.var_mokykla = ?';
+     $params[] = $own_school;
+     $types .= 's';
+ }
+ 
+ if ($search !== '') {
+-    $where .= " AND (1_vardas LIKE ? OR 1_pavarde LIKE ? OR konkurso_pav LIKE ?)";
++    // PATAISYTA: stulpeliai kvalifikuoti "d." prefiksu, nes pridėjus JOIN su konkursai
++    // (žr. žemiau), konkurso_pav tampa dviprasmiškas (egzistuoja abiejose lentelėse).
++    $where_clauses[] = '(d.1_vardas LIKE ? OR d.1_pavarde LIKE ? OR d.konkurso_pav LIKE ?)';
+     $like = '%' . $search . '%';
+     $params[] = $like;
+     $params[] = $like;
+@@ -52,12 +55,19 @@ if ($search !== '') {
+     $types .= 'sss';
+ }
+ 
+-$count_sql = "SELECT COUNT(*) as total FROM dalyviai $where";
++$where = 'WHERE ' . implode(' AND ', $where_clauses);
++
++// PATAISYTA: JOIN su konkursai pridėtas ir COUNT, ir pagrindinei užklausai vienodai,
++// kad "d." aliaso naudojimas $where sąlygoje veiktų abiejose.
++$count_sql = "SELECT COUNT(*) as total FROM dalyviai d LEFT JOIN konkursai k ON d.konkurso_pav = k.konkurso_pav $where";
+ $total_items = db_get_row(db_query($count_sql, $params, $types))['total'] ?? 0;
+ 
+-$sql = "SELECT reg_id, konkurso_pav, var_mokykla, 1_vardas, 1_pavarde, 1_klase, 1_mok, pil_data
+-        FROM dalyviai $where
+-        ORDER BY pil_data DESC
++$sql = "SELECT d.reg_id, d.konkurso_pav, d.var_mokykla, d.1_vardas, d.1_pavarde, d.1_klase, d.1_mok, d.pil_data,
++               k.status as olympiad_status
++        FROM dalyviai d
++        LEFT JOIN konkursai k ON d.konkurso_pav = k.konkurso_pav
++        $where
++        ORDER BY d.pil_data DESC
+         LIMIT ?, ?";
+ $stmt = db_query($sql, array_merge($params, [$offset, $limit]), $types . 'ii');
+ $students = db_get_results($stmt);
+@@ -107,9 +117,21 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
+                         <?php if (is_admin()): ?><td><?php echo htmlspecialchars($s['var_mokykla']); ?></td><?php endif; ?>
+                         <td class="text-muted small"><?php echo htmlspecialchars($s['pil_data']); ?></td>
+                         <td class="text-end">
+-                            <a href="<?php echo SITE_URL; ?>/modules/registration/edit_participant.php?id=<?php echo (int)$s['reg_id']; ?>" class="btn btn-sm btn-outline-primary">
+-                                <i class="fas fa-edit"></i> Redaguoti
+-                            </a>
++                            <?php
++                            $is_active_olympiad = (int)($s['olympiad_status'] ?? 1) === 0;
++                            // NAUJA: mokytojui (ne admin) redagavimo mygtukas rodomas tik kol
++                            // olimpiada aktyvi. Administratoriui - visada.
++                            $can_edit = is_admin() || $is_active_olympiad;
++                            ?>
++                            <?php if ($can_edit): ?>
++                                <a href="<?php echo SITE_URL; ?>/modules/registration/edit_participant.php?id=<?php echo (int)$s['reg_id']; ?>" class="btn btn-sm btn-outline-primary">
++                                    <i class="fas fa-edit"></i> Redaguoti
++                                </a>
++                            <?php else: ?>
++                                <span class="btn btn-sm btn-outline-secondary disabled" title="Olimpiada nebeaktyvi - redaguoti gali tik administratorius">
++                                    <i class="fas fa-lock"></i> Redaguoti
++                                </span>
++                            <?php endif; ?>
+                         </td>
+                     </tr>
+                     <?php endforeach; else: ?>
+diff --git a/modules/reports/evaluation_sheets.php b/modules/reports/evaluation_sheets.php
+index 18d46db..c2bb5a8 100644
+--- a/modules/reports/evaluation_sheets.php
++++ b/modules/reports/evaluation_sheets.php
+@@ -31,12 +31,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_results']) && is
+         exit;
+     }
+     if (isset($_POST['participant']) && is_array($_POST['participant'])) {
++        // PRIDĖTA: sužinome, ar olimpiada ŠMSM patvirtinta - nuo to priklauso,
++        // ar išsaugome kitas_etapas reikšmę (kad neperrašytume kitų olimpiadų duomenų netyčia)
++        $save_oly_row = db_get_row(db_query("SELECT smsm_patvirtintas FROM konkursai WHERE konkurso_pav = ?", [$selected_olympiad], 's'));
++        $save_is_smsm = $save_oly_row && $save_oly_row['smsm_patvirtintas'] == 1;
++
+         foreach ($_POST['participant'] as $reg_id => $data) {
+             $balai = isset($data['balai']) ? sanitize_input($data['balai']) : '';
+             $vieta = isset($data['vieta']) ? sanitize_input($data['vieta']) : '';
+-            
+-            $sql = "UPDATE dalyviai SET Balai = ?, Vieta = ? WHERE reg_id = ?";
+-            db_query($sql, [$balai, $vieta, $reg_id], 'ssi');
++
++            if ($save_is_smsm) {
++                $kitas_etapas = isset($data['kitas_etapas']) ? (int)$data['kitas_etapas'] : 0;
++                $sql = "UPDATE dalyviai SET Balai = ?, Vieta = ?, kitas_etapas = ? WHERE reg_id = ?";
++                db_query($sql, [$balai, $vieta, $kitas_etapas, $reg_id], 'ssii');
++            } else {
++                $sql = "UPDATE dalyviai SET Balai = ?, Vieta = ? WHERE reg_id = ?";
++                db_query($sql, [$balai, $vieta, $reg_id], 'ssi');
++            }
+         }
+         set_message('Rezultatai sėkmingai išsaugoti', 'success');
+     } else {
+@@ -51,8 +62,14 @@ $olympiads = $stmt ? db_get_results($stmt) : [];
+ 
+ $participants = [];
+ $participant_count = 0;
++$is_smsm = false;
+ if (!empty($selected_olympiad)) {
+-    $sql = "SELECT reg_id, konkurso_pav, Balai, Vieta FROM dalyviai WHERE konkurso_pav = ? ORDER BY CAST(Balai AS UNSIGNED) DESC, reg_id ASC";
++    // PRIDĖTA: patikriname, ar olimpiada ŠMSM patvirtinta - nuo to priklauso,
++    // ar rodomas "Kitas etapas" stulpelis (suderinta su results/view.php, result_sheet.php)
++    $oly_row = db_get_row(db_query("SELECT smsm_patvirtintas FROM konkursai WHERE konkurso_pav = ?", [$selected_olympiad], 's'));
++    $is_smsm = $oly_row && $oly_row['smsm_patvirtintas'] == 1;
++
++    $sql = "SELECT reg_id, konkurso_pav, Balai, Vieta, kitas_etapas FROM dalyviai WHERE konkurso_pav = ? ORDER BY CAST(Balai AS UNSIGNED) DESC, reg_id ASC";
+     $stmt = db_query($sql, [$selected_olympiad], 's');
+     if ($stmt) {
+         $participants = db_get_results($stmt);
+@@ -64,6 +81,9 @@ if (!empty($selected_olympiad)) {
+ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
+     header('Content-Type: text/html; charset=UTF-8');
+     $headers = ['KODAS', 'I užd.', 'II užd.', 'III užd.', 'IV užd.', 'V užd.', 'VI užd.', 'VII užd.', 'VIII užd.', 'IX užd.', 'X užd.', 'IŠ VISO BALŲ', 'VIETA'];
++    if ($is_smsm) {
++        $headers[] = 'Kitas etapas';
++    }
+     
+     $chunks = array_chunk($participants, 15);
+     $total_pages = count($chunks);
+@@ -72,14 +92,22 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
+         $data = [];
+         foreach ($chunk as $participant) {
+             if ($print_empty_mode) {
+-                $data[] = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
++                $row = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
++                if ($is_smsm) { $row[] = ''; }
+             } else {
+-                $data[] = [
++                $row = [
+                     $participant['reg_id'], '-', '-', '-', '-', '-', '-', '-', '-', '-', '-',
+                     $participant['Balai'] ?? '-',
+                     $participant['Vieta'] ?? '-'
+                 ];
++                if ($is_smsm) {
++                    $etapas_txt = '-';
++                    if (($participant['kitas_etapas'] ?? 0) == 1) $etapas_txt = 'Siunčiamas';
++                    elseif (($participant['kitas_etapas'] ?? 0) == 2) $etapas_txt = 'Nesiunčiamas';
++                    $row[] = $etapas_txt;
++                }
+             }
++            $data[] = $row;
+         }
+ 
+         echo '<div class="evaluation-section" style="page-break-after: always;">';
+@@ -151,6 +179,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
+                                             <th>IX užd.</th><th>X užd.</th>
+                                             <th style="width: 100px;">IŠ VISO BALŲ</th>
+                                             <th style="width: 130px;">VIETA</th>
++                                            <?php if ($is_smsm): ?>
++                                            <th style="width: 150px;">Kitas etapas</th>
++                                            <?php endif; ?>
+                                         </tr>
+                                     </thead>
+                                     <tbody>
+@@ -172,6 +203,15 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
+                                                         <option value="laureat." <?php echo ($participant['Vieta'] ?? '') == 'laureat.' ? 'selected' : ''; ?>>Laureatas</option>
+                                                     </select>
+                                                 </td>
++                                                <?php if ($is_smsm): ?>
++                                                <td>
++                                                    <select class="form-select form-select-sm" name="participant[<?php echo $participant['reg_id']; ?>][kitas_etapas]">
++                                                        <option value="0">-</option>
++                                                        <option value="1" <?php echo (($participant['kitas_etapas'] ?? 0) == 1) ? 'selected' : ''; ?>>Siunčiamas</option>
++                                                        <option value="2" <?php echo (($participant['kitas_etapas'] ?? 0) == 2) ? 'selected' : ''; ?>>Nesiunčiamas</option>
++                                                    </select>
++                                                </td>
++                                                <?php endif; ?>
+                                             </tr>
+                                         <?php endforeach; ?>
+                                     </tbody>

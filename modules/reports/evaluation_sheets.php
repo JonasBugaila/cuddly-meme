@@ -31,12 +31,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_results']) && is
         exit;
     }
     if (isset($_POST['participant']) && is_array($_POST['participant'])) {
+        // PRIDĖTA: sužinome, ar olimpiada ŠMSM patvirtinta - nuo to priklauso,
+        // ar išsaugome kitas_etapas reikšmę (kad neperrašytume kitų olimpiadų duomenų netyčia)
+        $save_oly_row = db_get_row(db_query("SELECT smsm_patvirtintas FROM konkursai WHERE konkurso_pav = ?", [$selected_olympiad], 's'));
+        $save_is_smsm = $save_oly_row && $save_oly_row['smsm_patvirtintas'] == 1;
+
         foreach ($_POST['participant'] as $reg_id => $data) {
             $balai = isset($data['balai']) ? sanitize_input($data['balai']) : '';
             $vieta = isset($data['vieta']) ? sanitize_input($data['vieta']) : '';
-            
-            $sql = "UPDATE dalyviai SET Balai = ?, Vieta = ? WHERE reg_id = ?";
-            db_query($sql, [$balai, $vieta, $reg_id], 'ssi');
+
+            if ($save_is_smsm) {
+                $kitas_etapas = isset($data['kitas_etapas']) ? (int)$data['kitas_etapas'] : 0;
+                $sql = "UPDATE dalyviai SET Balai = ?, Vieta = ?, kitas_etapas = ? WHERE reg_id = ?";
+                db_query($sql, [$balai, $vieta, $kitas_etapas, $reg_id], 'ssii');
+            } else {
+                $sql = "UPDATE dalyviai SET Balai = ?, Vieta = ? WHERE reg_id = ?";
+                db_query($sql, [$balai, $vieta, $reg_id], 'ssi');
+            }
         }
         set_message('Rezultatai sėkmingai išsaugoti', 'success');
     } else {
@@ -51,8 +62,14 @@ $olympiads = $stmt ? db_get_results($stmt) : [];
 
 $participants = [];
 $participant_count = 0;
+$is_smsm = false;
 if (!empty($selected_olympiad)) {
-    $sql = "SELECT reg_id, konkurso_pav, Balai, Vieta FROM dalyviai WHERE konkurso_pav = ? ORDER BY CAST(Balai AS UNSIGNED) DESC, reg_id ASC";
+    // PRIDĖTA: patikriname, ar olimpiada ŠMSM patvirtinta - nuo to priklauso,
+    // ar rodomas "Kitas etapas" stulpelis (suderinta su results/view.php, result_sheet.php)
+    $oly_row = db_get_row(db_query("SELECT smsm_patvirtintas FROM konkursai WHERE konkurso_pav = ?", [$selected_olympiad], 's'));
+    $is_smsm = $oly_row && $oly_row['smsm_patvirtintas'] == 1;
+
+    $sql = "SELECT reg_id, konkurso_pav, Balai, Vieta, kitas_etapas FROM dalyviai WHERE konkurso_pav = ? ORDER BY CAST(Balai AS UNSIGNED) DESC, reg_id ASC";
     $stmt = db_query($sql, [$selected_olympiad], 's');
     if ($stmt) {
         $participants = db_get_results($stmt);
@@ -64,6 +81,9 @@ if (!empty($selected_olympiad)) {
 if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
     header('Content-Type: text/html; charset=UTF-8');
     $headers = ['KODAS', 'I užd.', 'II užd.', 'III užd.', 'IV užd.', 'V užd.', 'VI užd.', 'VII užd.', 'VIII užd.', 'IX užd.', 'X užd.', 'IŠ VISO BALŲ', 'VIETA'];
+    if ($is_smsm) {
+        $headers[] = 'Kitas etapas';
+    }
     
     $chunks = array_chunk($participants, 15);
     $total_pages = count($chunks);
@@ -72,14 +92,22 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
         $data = [];
         foreach ($chunk as $participant) {
             if ($print_empty_mode) {
-                $data[] = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
+                $row = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
+                if ($is_smsm) { $row[] = ''; }
             } else {
-                $data[] = [
+                $row = [
                     $participant['reg_id'], '-', '-', '-', '-', '-', '-', '-', '-', '-', '-',
                     $participant['Balai'] ?? '-',
                     $participant['Vieta'] ?? '-'
                 ];
+                if ($is_smsm) {
+                    $etapas_txt = '-';
+                    if (($participant['kitas_etapas'] ?? 0) == 1) $etapas_txt = 'Siunčiamas';
+                    elseif (($participant['kitas_etapas'] ?? 0) == 2) $etapas_txt = 'Nesiunčiamas';
+                    $row[] = $etapas_txt;
+                }
             }
+            $data[] = $row;
         }
 
         echo '<div class="evaluation-section" style="page-break-after: always;">';
@@ -151,6 +179,9 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                             <th>IX užd.</th><th>X užd.</th>
                                             <th style="width: 100px;">IŠ VISO BALŲ</th>
                                             <th style="width: 130px;">VIETA</th>
+                                            <?php if ($is_smsm): ?>
+                                            <th style="width: 150px;">Kitas etapas</th>
+                                            <?php endif; ?>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -172,6 +203,15 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                                                         <option value="laureat." <?php echo ($participant['Vieta'] ?? '') == 'laureat.' ? 'selected' : ''; ?>>Laureatas</option>
                                                     </select>
                                                 </td>
+                                                <?php if ($is_smsm): ?>
+                                                <td>
+                                                    <select class="form-select form-select-sm" name="participant[<?php echo $participant['reg_id']; ?>][kitas_etapas]">
+                                                        <option value="0">-</option>
+                                                        <option value="1" <?php echo (($participant['kitas_etapas'] ?? 0) == 1) ? 'selected' : ''; ?>>Siunčiamas</option>
+                                                        <option value="2" <?php echo (($participant['kitas_etapas'] ?? 0) == 2) ? 'selected' : ''; ?>>Nesiunčiamas</option>
+                                                    </select>
+                                                </td>
+                                                <?php endif; ?>
                                             </tr>
                                         <?php endforeach; ?>
                                     </tbody>

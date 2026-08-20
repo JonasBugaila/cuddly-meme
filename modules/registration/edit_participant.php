@@ -46,6 +46,18 @@ if (!is_admin()) {
         redirect(SITE_URL . '/modules/registration/my_students.php');
         exit;
     }
+
+    // NAUJA: mokytojas gali redaguoti dalyvio informaciją TIK kol olimpiada aktyvi
+    // (konkursai.status = 0). Administratorius šio apribojimo neturi - gali redaguoti
+    // visada, taip pat ir po olimpiados pabaigos (pvz. taisant klaidą po rezultatų paskelbimo).
+    $oly_status_row = db_get_row(db_query("SELECT status FROM konkursai WHERE konkurso_pav = ?", [$participant['konkurso_pav']], 's'));
+    $olympiad_is_active = $oly_status_row && (int)$oly_status_row['status'] === 0;
+
+    if (!$olympiad_is_active) {
+        set_message('Ši olimpiada nebeaktyvi - dalyvio informaciją gali redaguoti tik administratorius.', 'error');
+        redirect(SITE_URL . '/modules/registration/my_students.php');
+        exit;
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

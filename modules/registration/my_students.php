@@ -24,11 +24,12 @@ $offset = ($page - 1) * $limit;
 
 $search = isset($_GET['q']) ? sanitize_input($_GET['q']) : '';
 
+$where_clauses = [];
 $params = [];
 $types = '';
 
 if (is_admin()) {
-    $where = "WHERE 1=1";
+    $where_clauses[] = '1=1';
 } else {
     $own_school_row = db_get_row(db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's'));
     $own_school = $own_school_row['var_mokykla'] ?? '';
@@ -38,13 +39,15 @@ if (is_admin()) {
         redirect(SITE_URL);
     }
 
-    $where = "WHERE var_mokykla = ?";
+    $where_clauses[] = 'd.var_mokykla = ?';
     $params[] = $own_school;
     $types .= 's';
 }
 
 if ($search !== '') {
-    $where .= " AND (1_vardas LIKE ? OR 1_pavarde LIKE ? OR konkurso_pav LIKE ?)";
+    // PATAISYTA: stulpeliai kvalifikuoti "d." prefiksu, nes pridėjus JOIN su konkursai
+    // (žr. žemiau), konkurso_pav tampa dviprasmiškas (egzistuoja abiejose lentelėse).
+    $where_clauses[] = '(d.1_vardas LIKE ? OR d.1_pavarde LIKE ? OR d.konkurso_pav LIKE ?)';
     $like = '%' . $search . '%';
     $params[] = $like;
     $params[] = $like;
@@ -52,12 +55,19 @@ if ($search !== '') {
     $types .= 'sss';
 }
 
-$count_sql = "SELECT COUNT(*) as total FROM dalyviai $where";
+$where = 'WHERE ' . implode(' AND ', $where_clauses);
+
+// PATAISYTA: JOIN su konkursai pridėtas ir COUNT, ir pagrindinei užklausai vienodai,
+// kad "d." aliaso naudojimas $where sąlygoje veiktų abiejose.
+$count_sql = "SELECT COUNT(*) as total FROM dalyviai d LEFT JOIN konkursai k ON d.konkurso_pav = k.konkurso_pav $where";
 $total_items = db_get_row(db_query($count_sql, $params, $types))['total'] ?? 0;
 
-$sql = "SELECT reg_id, konkurso_pav, var_mokykla, 1_vardas, 1_pavarde, 1_klase, 1_mok, pil_data
-        FROM dalyviai $where
-        ORDER BY pil_data DESC
+$sql = "SELECT d.reg_id, d.konkurso_pav, d.var_mokykla, d.1_vardas, d.1_pavarde, d.1_klase, d.1_mok, d.pil_data,
+               k.status as olympiad_status
+        FROM dalyviai d
+        LEFT JOIN konkursai k ON d.konkurso_pav = k.konkurso_pav
+        $where
+        ORDER BY d.pil_data DESC
         LIMIT ?, ?";
 $stmt = db_query($sql, array_merge($params, [$offset, $limit]), $types . 'ii');
 $students = db_get_results($stmt);
@@ -107,9 +117,21 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <?php if (is_admin()): ?><td><?php echo htmlspecialchars($s['var_mokykla']); ?></td><?php endif; ?>
                         <td class="text-muted small"><?php echo htmlspecialchars($s['pil_data']); ?></td>
                         <td class="text-end">
-                            <a href="<?php echo SITE_URL; ?>/modules/registration/edit_participant.php?id=<?php echo (int)$s['reg_id']; ?>" class="btn btn-sm btn-outline-primary">
-                                <i class="fas fa-edit"></i> Redaguoti
-                            </a>
+                            <?php
+                            $is_active_olympiad = (int)($s['olympiad_status'] ?? 1) === 0;
+                            // NAUJA: mokytojui (ne admin) redagavimo mygtukas rodomas tik kol
+                            // olimpiada aktyvi. Administratoriui - visada.
+                            $can_edit = is_admin() || $is_active_olympiad;
+                            ?>
+                            <?php if ($can_edit): ?>
+                                <a href="<?php echo SITE_URL; ?>/modules/registration/edit_participant.php?id=<?php echo (int)$s['reg_id']; ?>" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-edit"></i> Redaguoti
+                                </a>
+                            <?php else: ?>
+                                <span class="btn btn-sm btn-outline-secondary disabled" title="Olimpiada nebeaktyvi - redaguoti gali tik administratorius">
+                                    <i class="fas fa-lock"></i> Redaguoti
+                                </span>
+                            <?php endif; ?>
                         </td>
                     </tr>
                     <?php endforeach; else: ?>

@@ -66,6 +66,17 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                         </div>
                     </div>
+                    <div class="col-md-4">
+                        <div class="card admin-card mb-4">
+                            <div class="card-header">
+                                <h3>Klasių valdymas</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>Klasių sąrašo pridėjimas, redagavimas ir šalinimas.</p>
+                                <a href="<?php echo SITE_URL; ?>/modules/admin/classes.php" class="btn btn-primary">Klasių valdymas</a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="row">
                     <div class="col-md-4">
