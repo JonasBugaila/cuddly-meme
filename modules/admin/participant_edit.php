@@ -161,7 +161,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reg_id'])) {
         } catch (Exception $e) {
             $conn->rollback();
             error_log("Update failed: " . $e->getMessage() . " | ID: " . $reg_id);
-            set_message('Klaida atnaujinant dalyvį: ' . $e->getMessage(), 'error');
+            // SAUGU: draugiškas pranešimas dublikato atveju (UNIQUE apribojimas
+            // uniq_dalyvis_olimpiadoje - žr. sql_migrations/2026-08-20_data_integrity.sql),
+            // vietoj žalios SQL klaidos teksto.
+            if ($e->getCode() === 1062) {
+                set_message("Šis dalyvis (vardas, pavardė, mokykla) jau užregistruotas į šią olimpiadą - patikrinkite, ar nesusiduriama su kitu esamu įrašu.", 'error');
+            } else {
+                set_message('Klaida atnaujinant dalyvį: ' . $e->getMessage(), 'error');
+            }
         }
     } else {
         foreach ($errors as $error) {

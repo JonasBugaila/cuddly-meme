@@ -32,6 +32,9 @@ if (!$participant) {
 // PRIDĖTA: klasių sąrašas pasirinkimui iš dropdown (kaip admin/participant_edit.php)
 $classes = db_get_results(db_query("SELECT klases FROM klases ORDER BY klases ASC"));
 
+// PATAISYTA: kvalifikacijų sąrašas dabar imamas iš DB lentelės (kaip admin/participant_edit.php)
+$qualifications = db_get_results(db_query("SELECT kategorija FROM kvalifikacijos ORDER BY kategorija ASC"));
+
 // SAUGU: nuosavybės patikra - paprastas vartotojas gali redaguoti TIK savo mokyklos dalyvius
 if (!is_admin()) {
     $own_school_row = db_get_row(db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's'));
@@ -66,6 +69,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($vardas) || empty($pavarde) || empty($klase)) {
         set_message('Prašome užpildyti privalomus laukus (vardas, pavardė, klasė).', 'error');
     } else {
+        // SAUGU: patikra PRIEŠ atnaujinimą, ar pakeistas vardas+pavardė+mokykla
+        // nesusidurs su KITU jau egzistuojančiu dalyviu toje pačioje olimpiadoje
+        // (dublikatų apsauga - reg_id != $id, kad neblokuotų paties savęs).
+        $duplicate_check = db_get_row(db_query(
+            "SELECT reg_id FROM dalyviai WHERE 1_vardas = ? AND 1_pavarde = ? AND var_mokykla = ? AND konkurso_pav = ? AND reg_id != ?",
+            [$vardas, $pavarde, $participant['var_mokykla'], $participant['konkurso_pav'], $id], 'ssssi'
+        ));
+
+        if ($duplicate_check) {
+            set_message("Kitas dalyvis vardu {$vardas} {$pavarde} jau užregistruotas į šią olimpiadą. Patikrinkite, ar neredaguojate teisingo įrašo.", 'error');
+        } else {
         // SAUGU: whitelist'as atnaujinamų stulpelių - Balai/Vieta/status/kitas_etapas/
         // var_mokykla/konkurso_pav sąmoningai NEĮTRAUKTI.
         $update_data = [
@@ -81,7 +95,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'pastabos'    => $pastabos,
         ];
 
-        $result = db_update('dalyviai', $update_data, 'reg_id = ?', [$id]);
+        // SAUGU: try/catch - db_connect() naudoja MYSQLI_REPORT_STRICT, todėl DB
+        // klaidos (pvz. UNIQUE apribojimo pažeidimas) meta išimtį per db_update().
+        try {
+            $result = db_update('dalyviai', $update_data, 'reg_id = ?', [$id]);
+        } catch (mysqli_sql_exception $e) {
+            $result = false;
+            if ($e->getCode() === 1062) {
+                set_message("Kitas dalyvis vardu {$vardas} {$pavarde} jau užregistruotas į šią olimpiadą.", 'error');
+            } else {
+                error_log("DB klaida redaguojant dalyvį: " . $e->getMessage());
+                set_message('Klaida atnaujinant duomenis. Bandykite dar kartą.', 'error');
+            }
+        }
 
         if ($result) {
             // NAUJA: redagavimas fiksuojamas atskirame mokytojų veiklos žurnale
@@ -93,8 +119,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             set_message('Dalyvio duomenys sėkmingai atnaujinti.', 'success');
             redirect(SITE_URL . '/modules/registration/my_students.php');
             exit;
-        } else {
+        } elseif (!isset($_SESSION['message'])) {
             set_message('Klaida atnaujinant duomenis.', 'error');
+        }
         }
     }
 
@@ -157,8 +184,8 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <label class="fw-bold">Mokytojo kvalifikacija</label>
                         <select name="1_mok_kvali" class="form-select form-control">
                             <option value="">-- Pasirinkite --</option>
-                            <?php foreach (['mokytojas', 'vyr. mokytojas', 'mokyt. metodininkas', 'mokyt. ekspertas'] as $kval): ?>
-                                <option value="<?php echo $kval; ?>" <?php echo ($participant['1_mok_kvali'] ?? '') === $kval ? 'selected' : ''; ?>><?php echo $kval; ?></option>
+                            <?php foreach ($qualifications as $q): $kval = $q['kategorija']; ?>
+                                <option value="<?php echo htmlspecialchars($kval); ?>" <?php echo ($participant['1_mok_kvali'] ?? '') === $kval ? 'selected' : ''; ?>><?php echo htmlspecialchars($kval); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
@@ -172,8 +199,8 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                         <label class="fw-bold text-muted">Antro mokytojo kvalifikacija</label>
                         <select name="2_mok_kvali" class="form-select form-control">
                             <option value="">-- Pasirinkite --</option>
-                            <?php foreach (['mokytojas', 'vyr. mokytojas', 'mokyt. metodininkas', 'mokyt. ekspertas'] as $kval): ?>
-                                <option value="<?php echo $kval; ?>" <?php echo ($participant['2_mok_kvali'] ?? '') === $kval ? 'selected' : ''; ?>><?php echo $kval; ?></option>
+                            <?php foreach ($qualifications as $q): $kval = $q['kategorija']; ?>
+                                <option value="<?php echo htmlspecialchars($kval); ?>" <?php echo ($participant['2_mok_kvali'] ?? '') === $kval ? 'selected' : ''; ?>><?php echo htmlspecialchars($kval); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>

@@ -31,17 +31,30 @@ if (isset($_GET['delete']) && !empty($_GET['delete'])) {
     $olympiad = db_get_row($stmt);
     
     if ($olympiad) {
-        // NAUJA: fiksuojame trynimo veiksmą bendrame sistemos žurnale PRIEŠ patį trynimą
-        log_action('Olimpiados pašalinimas', "Pašalinta olimpiada: \"{$olympiad['konkurso_pav']}\" (ID: {$olympiad_id})");
+        // SAUGU: patikra, ar olimpiada turi registruotų dalyvių, PRIEŠ trinant.
+        // Anksčiau trynimas vykdavo be jokios patikros, todėl dalyviai likdavo
+        // "našlaičiais" (nurodo į neegzistuojančią konkursai eilutę) ir tapdavo
+        // nematomi visose ataskaitose, nors duomenys fiziškai lieka DB.
+        $participant_count = db_get_row(db_query(
+            "SELECT COUNT(*) as count FROM dalyviai WHERE konkurso_pav = ?",
+            [$olympiad['konkurso_pav']], 's'
+        ))['count'];
 
-        // Šaliname olimpiadą
-        $sql = "DELETE FROM konkursai WHERE konk_id = ?";
-        $stmt = db_query($sql, [$olympiad_id]);
-        
-        if ($stmt) {
-            set_message('Olimpiada sėkmingai pašalinta', 'success');
+        if ($participant_count > 0) {
+            set_message("Negalima pašalinti olimpiados - joje registruota {$participant_count} dalyvių. Pirma pašalinkite arba perkelkite dalyvius.", 'error');
         } else {
-            set_message('Klaida šalinant olimpiadą', 'error');
+            // NAUJA: fiksuojame trynimo veiksmą bendrame sistemos žurnale PRIEŠ patį trynimą
+            log_action('Olimpiados pašalinimas', "Pašalinta olimpiada: \"{$olympiad['konkurso_pav']}\" (ID: {$olympiad_id})");
+
+            // Šaliname olimpiadą
+            $sql = "DELETE FROM konkursai WHERE konk_id = ?";
+            $stmt = db_query($sql, [$olympiad_id]);
+
+            if ($stmt) {
+                set_message('Olimpiada sėkmingai pašalinta', 'success');
+            } else {
+                set_message('Klaida šalinant olimpiadą', 'error');
+            }
         }
     } else {
         set_message('Olimpiada nerasta', 'error');

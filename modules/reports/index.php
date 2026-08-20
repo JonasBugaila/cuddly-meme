@@ -69,6 +69,18 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                         </div>
                     </div>
+
+                    <div class="col-md-4">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h3>Išplėstinė analitika</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>Reitingai, filtrai pagal prizines vietas, kitą etapą, mokytojų suvestinės.</p>
+                                <a href="<?php echo SITE_URL; ?>/modules/reports/analitika.php" class="btn btn-primary">Atidaryti analitiką</a>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="row">

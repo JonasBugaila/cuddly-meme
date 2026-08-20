@@ -102,16 +102,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['olympiad_id'])) {
             'vieta' => $vieta,
             'aprasymas' => $aprasymas
         ];
-        
-        $result = db_update('konkursai', $data_array, 'konk_id = ?', [$olympiad_id]);
-        
-        if ($result) {
+
+        // SAUGU: jei pavadinimas keičiasi, cascade atnaujiname ir dalyviai.konkurso_pav
+        // per transakciją (analogiškai school_edit.php logikai mokyklos pavadinimui).
+        // Anksčiau vien tik "konkursai" lentelė būdavo atnaujinama, todėl pervadinus
+        // olimpiadą visi jau užregistruoti dalyviai tapdavo nematomi (jų konkurso_pav
+        // vis dar rodė senąjį pavadinimą).
+        $old_pavadinimas = $olympiad['konkurso_pav'];
+        $conn = db_connect();
+        $conn->begin_transaction();
+
+        try {
+            $result = db_update('konkursai', $data_array, 'konk_id = ?', [$olympiad_id]);
+            if (!$result) {
+                throw new Exception("Nepavyko atnaujinti konkursai lentelės: " . $conn->error);
+            }
+
+            if ($old_pavadinimas !== $pavadinimas) {
+                $sql = "UPDATE dalyviai SET konkurso_pav = ? WHERE konkurso_pav = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param('ss', $pavadinimas, $old_pavadinimas);
+                if (!$stmt->execute()) {
+                    throw new Exception("Nepavyko atnaujinti dalyviai lentelės: " . $stmt->error);
+                }
+            }
+
+            $conn->commit();
             set_message('Olimpiada sėkmingai atnaujinta', 'success');
             redirect(SITE_URL . '/modules/admin/olympiad_edit.php?id=' . $olympiad_id);
-        } else {
-            $conn = db_connect();
-            error_log("Update failed: " . $conn->error . " | ID: " . $olympiad_id . " | SQL: UPDATE konkursai SET " . implode(', ', array_keys($data_array)) . " WHERE konk_id = $olympiad_id");
-            set_message('Klaida atnaujinant olimpiadą: ' . $conn->error, 'error');
+        } catch (Exception $e) {
+            $conn->rollback();
+            error_log("Update failed: " . $e->getMessage() . " | ID: " . $olympiad_id);
+            set_message('Klaida atnaujinant olimpiadą: ' . $e->getMessage(), 'error');
         }
     } else {
         foreach ($errors as $error) {

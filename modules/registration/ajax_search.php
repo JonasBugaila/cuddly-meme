@@ -29,27 +29,41 @@ if (mb_strlen($term, 'UTF-8') < 2) {
 
 $search_param = '%' . $term . '%';
 
+// NAUJA: pasirinkta olimpiada (jei perduota) - naudojama tik "jau užregistruotas
+// šioje olimpiadoje" žymai apskaičiuoti, dublikatų apsaugos funkcijai.
+$selected_olympiad = isset($_GET['olympiad']) ? trim($_GET['olympiad']) : '';
+
 // SAUGU: paprastas vartotojas (mokytojas) paieškoje mato TIK savo mokyklos mokinius.
 // Anksčiau paieška grąžindavo visų mokyklų mokinius bet kuriam prisijungusiam vartotojui.
 if (is_admin()) {
-    $sql = "SELECT DISTINCT 1_vardas, 1_pavarde, 1_klase, var_mokykla, 1_mok
-            FROM dalyviai
-            WHERE 1_pavarde LIKE ? LIMIT 10";
+    $sql = "SELECT DISTINCT d.1_vardas, d.1_pavarde, d.1_klase, d.var_mokykla, d.1_mok,
+                EXISTS (
+                    SELECT 1 FROM dalyviai d2
+                    WHERE d2.1_vardas = d.1_vardas AND d2.1_pavarde = d.1_pavarde
+                      AND d2.var_mokykla = d.var_mokykla AND d2.konkurso_pav = ?
+                ) as already_registered
+            FROM dalyviai d
+            WHERE d.1_pavarde LIKE ? LIMIT 10";
     $stmt = $conn->prepare($sql);
     if ($stmt) {
-        $stmt->bind_param("s", $search_param);
+        $stmt->bind_param("ss", $selected_olympiad, $search_param);
         $stmt->execute();
     }
 } else {
     $own_school_row = db_get_row(db_query("SELECT var_mokykla FROM vartotojas WHERE vart_id = ?", [$_SESSION['user_id']], 's'));
     $own_school = $own_school_row['var_mokykla'] ?? '';
 
-    $sql = "SELECT DISTINCT 1_vardas, 1_pavarde, 1_klase, var_mokykla, 1_mok
-            FROM dalyviai
-            WHERE 1_pavarde LIKE ? AND var_mokykla = ? LIMIT 10";
+    $sql = "SELECT DISTINCT d.1_vardas, d.1_pavarde, d.1_klase, d.var_mokykla, d.1_mok,
+                EXISTS (
+                    SELECT 1 FROM dalyviai d2
+                    WHERE d2.1_vardas = d.1_vardas AND d2.1_pavarde = d.1_pavarde
+                      AND d2.var_mokykla = d.var_mokykla AND d2.konkurso_pav = ?
+                ) as already_registered
+            FROM dalyviai d
+            WHERE d.1_pavarde LIKE ? AND d.var_mokykla = ? LIMIT 10";
     $stmt = $conn->prepare($sql);
     if ($stmt) {
-        $stmt->bind_param("ss", $search_param, $own_school);
+        $stmt->bind_param("sss", $selected_olympiad, $search_param, $own_school);
         $stmt->execute();
     }
 }
@@ -65,7 +79,10 @@ if ($stmt) {
             'pavarde' => $row['1_pavarde'],
             'klase' => $row['1_klase'],
             'mokykla' => $row['var_mokykla'],
-            'mokytojas' => $row['1_mok']
+            'mokytojas' => $row['1_mok'],
+            // NAUJA: true, jei šis mokinys jau turi registraciją į $selected_olympiad
+            // (kai olimpiada dar nepasirinkta, $selected_olympiad === '', todėl visada false)
+            'already_registered' => (bool)$row['already_registered']
         ];
     }
     

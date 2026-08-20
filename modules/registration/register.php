@@ -45,6 +45,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])
         $conn = db_connect();
         
         if ($conn) {
+            // SAUGU: patikra PRIEŠ įrašymą, ar šis mokinys (vardas+pavardė+mokykla)
+            // jau nėra užregistruotas būtent į šią olimpiadą. Mokinys GALI dalyvauti
+            // keliose skirtingose olimpiadose (tai normalu) - draudžiama tik ta pati
+            // olimpiada + tas pats mokinys du kartus.
+            $duplicate_check = db_get_row(db_query(
+                "SELECT reg_id FROM dalyviai WHERE 1_vardas = ? AND 1_pavarde = ? AND var_mokykla = ? AND konkurso_pav = ?",
+                [$vardas, $pavarde, $var_mokykla, $konkurso_pav], 'ssss'
+            ));
+
+            if ($duplicate_check) {
+                set_message("Mokinys {$vardas} {$pavarde} jau užregistruotas į šią olimpiadą. Naudokite greitąją paiešką, kad pasirinktumėte jį kitai olimpiadai, arba patikrinkite \"Mano dalyviai\" sąrašą.", 'error');
+                redirect(current_url());
+                exit;
+            }
+
             $sql = "INSERT INTO dalyviai (
                         konkurso_pav, var_mokykla, pil_data, 
                         1_vardas, 1_pavarde, 1_klase, 
@@ -61,17 +76,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])
                     $inf_1, $inf_2, $pastabos, $vart_id
                 );
                 
-                if ($stmt->execute()) {
-                    $new_reg_id = $conn->insert_id;
-                    // NAUJA: dalyvio registravimas fiksuojamas atskirame mokytojų veiklos žurnale
-                    log_teacher_action(
-                        'Registravo dalyvį',
-                        "{$vardas} {$pavarde} ({$klase} kl.) į \"{$konkurso_pav}\" ({$var_mokykla})",
-                        $new_reg_id
-                    );
-                    set_message('Dalyvis sėkmingai užregistruotas į olimpiadą!', 'success');
-                } else {
-                    set_message('Klaida išsaugant duomenis: ' . $stmt->error, 'error');
+                // SAUGU: try/catch aplink execute() - db_connect() naudoja
+                // MYSQLI_REPORT_STRICT, todėl DB klaidos (pvz. UNIQUE apribojimo
+                // pažeidimas) meta išimtį, o ne tiesiog grąžina false. Šis blokas
+                // apsaugo nuo netikėtos "fatal error" situacijos lenktynių sąlygos
+                // atveju (du vienalaikiai vieno mokinio registravimo bandymai).
+                try {
+                    if ($stmt->execute()) {
+                        $new_reg_id = $conn->insert_id;
+                        // NAUJA: dalyvio registravimas fiksuojamas atskirame mokytojų veiklos žurnale
+                        log_teacher_action(
+                            'Registravo dalyvį',
+                            "{$vardas} {$pavarde} ({$klase} kl.) į \"{$konkurso_pav}\" ({$var_mokykla})",
+                            $new_reg_id
+                        );
+                        set_message('Dalyvis sėkmingai užregistruotas į olimpiadą!', 'success');
+                    } else {
+                        set_message('Klaida išsaugant duomenis: ' . $stmt->error, 'error');
+                    }
+                } catch (mysqli_sql_exception $e) {
+                    if ($e->getCode() === 1062) {
+                        set_message("Mokinys {$vardas} {$pavarde} jau užregistruotas į šią olimpiadą.", 'error');
+                    } else {
+                        error_log("DB klaida registruojant dalyvį: " . $e->getMessage());
+                        set_message('Klaida išsaugant duomenis. Bandykite dar kartą.', 'error');
+                    }
                 }
                 $stmt->close();
             }
@@ -100,6 +129,11 @@ if ($conn) {
 // PRIDĖTA: klasių sąrašas pasirinkimui iš dropdown (kaip admin/participant_edit.php)
 $classes = db_get_results(db_query("SELECT klases FROM klases ORDER BY klases ASC"));
 
+// PATAISYTA: kvalifikacijų sąrašas dabar imamas iš DB lentelės (kaip admin/participant_edit.php),
+// o ne fiksuoto PHP masyvo - anksčiau du sąrašai galėjo išsiskirti, jei administratorius
+// pakeistų kvalifikacijos_categorijas per DB.
+$qualifications = db_get_results(db_query("SELECT kategorija FROM kvalifikacijos ORDER BY kategorija ASC"));
+
 // =========================================================
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -122,7 +156,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="card-body bg-light">
             
             <div class="alert alert-info border-info">
-                <strong><i class="fas fa-info-circle"></i> Patarimas:</strong> Pradėkite vesti mokinio pavardę greitojoje paieškoje – jei mokinys jau dalyvavo, sistema automatiškai užpildys jo duomenis.
+                <strong><i class="fas fa-info-circle"></i> Patarimas:</strong> Pirmiausia pasirinkite olimpiadą, tada ieškokite mokinio pavardės – jei mokinys jau registruotas sistemoje, sistema automatiškai užpildys jo duomenis ir jums liks tik jį patvirtinti. Jei mokinys jau užregistruotas būtent į pasirinktą olimpiadą, jis bus pažymėtas ir jo pasirinkti negalėsite (dublikatų apsauga).
             </div>
 
            <form action="" method="POST" class="bg-white p-4 border rounded">
@@ -130,21 +164,12 @@ require_once __DIR__ . '/../../includes/header.php';
     <!-- PRIDĖTA -->
     <input type="hidden" name="csrf_token" value="<?php echo generate_csrf_token(); ?>">
 
-    <!-- GREITA PAIEŠKA -->
-    <div class="form-group autocomplete-container mb-4">
-                    <label for="paieska" class="font-weight-bold text-primary"><i class="fas fa-search"></i> Greita paieška istorijoje (pagal pavardę):</label>
-                    <input type="text" id="paieska" class="form-control form-control-lg border-primary" placeholder="Pvz.: Jonaitis..." autocomplete="off">
-                    <div id="paieskos-rezultatai"></div>
-                </div>
-                
-                <hr class="mb-4">
-
-                <!-- PAGRINDINĖ INFORMACIJA -->
+                <!-- PAGRINDINĖ INFORMACIJA (perkelta prieš paiešką, kad paieška žinotų pasirinktą olimpiadą) -->
                 <h5 class="text-secondary mb-3 border-bottom pb-2">Bendra informacija</h5>
                 <div class="row">
                     <div class="col-md-6 form-group mb-3">
                         <label class="fw-bold">Konkursas / Olimpiada <span class="text-danger">*</span></label>
-                        <select name="konkurso_pav" class="form-select form-control" required>
+                        <select name="konkurso_pav" id="konkurso_pav" class="form-select form-control" required>
                             <option value="">-- Pasirinkite --</option>
                             <?php foreach ($konkursai as $k_pav): ?>
                                 <option value="<?php echo htmlspecialchars($k_pav); ?>"><?php echo htmlspecialchars($k_pav); ?></option>
@@ -161,6 +186,15 @@ require_once __DIR__ . '/../../includes/header.php';
                         <?php endif; ?>
                     </div>
                 </div>
+
+                <!-- GREITA PAIEŠKA -->
+    <div class="form-group autocomplete-container mb-4">
+                    <label for="paieska" class="font-weight-bold text-primary"><i class="fas fa-search"></i> Greita paieška istorijoje (pagal pavardę):</label>
+                    <input type="text" id="paieska" class="form-control form-control-lg border-primary" placeholder="Pvz.: Jonaitis..." autocomplete="off">
+                    <div id="paieskos-rezultatai"></div>
+                </div>
+
+                <hr class="mb-4">
 
                 <!-- MOKINIO INFORMACIJA -->
                 <h5 class="text-secondary mt-3 mb-3 border-bottom pb-2">Mokinio duomenys</h5>
@@ -197,10 +231,9 @@ require_once __DIR__ . '/../../includes/header.php';
                         <label class="fw-bold">Mokytojo kvalifikacija</label>
                         <select name="1_mok_kvali" id="kvalifikacija" class="form-select form-control">
                             <option value="">-- Pasirinkite (Neprivaloma) --</option>
-                            <option value="mokytojas">mokytojas</option>
-                            <option value="vyr. mokytojas">vyr. mokytojas</option>
-                            <option value="mokyt. metodininkas">mokyt. metodininkas</option>
-                            <option value="mokyt. ekspertas">mokyt. ekspertas</option>
+                            <?php foreach ($qualifications as $q): ?>
+                                <option value="<?php echo htmlspecialchars($q['kategorija']); ?>"><?php echo htmlspecialchars($q['kategorija']); ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
@@ -215,10 +248,9 @@ require_once __DIR__ . '/../../includes/header.php';
                         <label class="fw-bold text-muted">Antro mokytojo kvalifikacija</label>
                         <select name="2_mok_kvali" id="kvalifikacija_2" class="form-select form-control">
                             <option value="">-- Pasirinkite (Neprivaloma) --</option>
-                            <option value="mokytojas">mokytojas</option>
-                            <option value="vyr. mokytojas">vyr. mokytojas</option>
-                            <option value="mokyt. metodininkas">mokyt. metodininkas</option>
-                            <option value="mokyt. ekspertas">mokyt. ekspertas</option>
+                            <?php foreach ($qualifications as $q): ?>
+                                <option value="<?php echo htmlspecialchars($q['kategorija']); ?>"><?php echo htmlspecialchars($q['kategorija']); ?></option>
+                            <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
@@ -262,8 +294,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const mokytojasInput = document.getElementById('mokytojas');
     const kvalifikacijaInput = document.getElementById('kvalifikacija');
     const rezultataiDiv = document.getElementById('paieskos-rezultatai');
+    const konkursoSelect = document.getElementById('konkurso_pav');
     
     let timeout = null;
+
+    // NAUJA: pasikeitus olimpiadai, paslepiame senus paieškos rezultatus,
+    // nes juose žymėta "jau užregistruotas" būsena priklauso nuo olimpiados.
+    konkursoSelect.addEventListener('change', function() {
+        rezultataiDiv.style.display = 'none';
+        rezultataiDiv.innerHTML = '';
+    });
 
     paieskaInput.addEventListener('input', function() {
         clearTimeout(timeout);
@@ -274,7 +314,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         timeout = setTimeout(function() {
-            fetch('ajax_search.php?term=' + encodeURIComponent(term))
+            const selectedOlympiad = konkursoSelect.value;
+            const url = 'ajax_search.php?term=' + encodeURIComponent(term) + '&olympiad=' + encodeURIComponent(selectedOlympiad);
+
+            fetch(url)
                 .then(r => r.json())
                 .then(data => {
                     rezultataiDiv.innerHTML = '';
@@ -283,19 +326,31 @@ document.addEventListener('DOMContentLoaded', function() {
                         ul.className = 'autocomplete-list';
                         data.forEach(item => {
                             const li = document.createElement('li');
-                            li.textContent = item.label;
-                            li.addEventListener('click', function() {
-                                vardasInput.value = item.vardas;
-                                pavardeInput.value = item.pavarde;
-                                klaseInput.value = item.klase;
-                                <?php if (is_admin()): ?>
-                                mokyklaInput.value = item.mokykla;
-                                <?php endif; ?>
-                                mokytojasInput.value = item.mokytojas;
-                                
-                                paieskaInput.value = ''; 
-                                rezultataiDiv.style.display = 'none';
-                            });
+
+                            if (item.already_registered) {
+                                // NAUJA: mokinys jau užregistruotas į PASIRINKTĄ olimpiadą -
+                                // rodomas, bet pažymėtas ir neaktyvuojamas (dublikatų apsauga)
+                                li.innerHTML = item.label + ' <span class="badge bg-warning text-dark ms-1">jau registruotas šioje olimpiadoje</span>';
+                                li.style.opacity = '0.6';
+                                li.style.cursor = 'not-allowed';
+                                li.addEventListener('click', function(e) {
+                                    e.preventDefault();
+                                });
+                            } else {
+                                li.textContent = item.label;
+                                li.addEventListener('click', function() {
+                                    vardasInput.value = item.vardas;
+                                    pavardeInput.value = item.pavarde;
+                                    klaseInput.value = item.klase;
+                                    <?php if (is_admin()): ?>
+                                    mokyklaInput.value = item.mokykla;
+                                    <?php endif; ?>
+                                    mokytojasInput.value = item.mokytojas;
+
+                                    paieskaInput.value = '';
+                                    rezultataiDiv.style.display = 'none';
+                                });
+                            }
                             ul.appendChild(li);
                         });
                         rezultataiDiv.appendChild(ul);
