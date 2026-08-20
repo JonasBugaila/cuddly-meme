@@ -134,6 +134,18 @@ $classes = db_get_results(db_query("SELECT klases FROM klases ORDER BY klases AS
 // pakeistų kvalifikacijos_categorijas per DB.
 $qualifications = db_get_results(db_query("SELECT kategorija FROM kvalifikacijos ORDER BY kategorija ASC"));
 
+// PATAISYTA: jei atėjome iš konkrečios olimpiados puslapio (olympiads/active.php,
+// olympiads/view.php, registration/index.php visi siunčia ?olympiad_id=X), automatiškai
+// pažymime tą olimpiadą dropdown'e - anksčiau šis parametras buvo visiškai ignoruojamas
+// ir mokytojui tekdavo pasirinkti olimpiadą iš naujo net paspaudus konkretų "Registruoti" mygtuką.
+$preselected_olympiad = '';
+if (isset($_GET['olympiad_id']) && ctype_digit((string)$_GET['olympiad_id'])) {
+    $pre_row = db_get_row(db_query("SELECT konkurso_pav FROM konkursai WHERE konk_id = ? AND status = 0", [(int)$_GET['olympiad_id']], 'i'));
+    if ($pre_row) {
+        $preselected_olympiad = $pre_row['konkurso_pav'];
+    }
+}
+
 // =========================================================
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -172,7 +184,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <select name="konkurso_pav" id="konkurso_pav" class="form-select form-control" required>
                             <option value="">-- Pasirinkite --</option>
                             <?php foreach ($konkursai as $k_pav): ?>
-                                <option value="<?php echo htmlspecialchars($k_pav); ?>"><?php echo htmlspecialchars($k_pav); ?></option>
+                                <option value="<?php echo htmlspecialchars($k_pav); ?>" <?php echo ($preselected_olympiad !== '' && $preselected_olympiad === $k_pav) ? 'selected' : ''; ?>><?php echo htmlspecialchars($k_pav); ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>

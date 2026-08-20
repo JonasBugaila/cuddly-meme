@@ -116,6 +116,17 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                             </div>
                         </div>
                     </div>
+                    <div class="col-md-4">
+                        <div class="card admin-card mb-4 border-danger">
+                            <div class="card-header bg-danger text-white">
+                                <h3>Metų pabaigos archyvavimas</h3>
+                            </div>
+                            <div class="card-body">
+                                <p>Eksportuoti metų duomenis ir paruošti sistemą naujiems metams.</p>
+                                <a href="<?php echo SITE_URL; ?>/modules/admin/year_reset.php" class="btn btn-danger">Atidaryti įrankį</a>
+                            </div>
+                        </div>
+                    </div>
 					<div class="row">
 					<div class="col-md-4">
                         <div class="card admin-card mb-4">
