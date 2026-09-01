@@ -572,18 +572,6 @@ function render_pagination($total_items, $limit, $current_page) {
     echo '</div>';
 }
 
-function get_print_layout() {
-    $file = dirname(dirname(dirname(__FILE__))) .'/config/print_layout.json';
-    if (file_exists($file)) {
-        return json_decode(file_get_contents($file), true);
-    }
-    return [
-        'header_html' => '<div style="text-align: center; margin-bottom: 20px;"><h3 style="margin-bottom: 5px;">{{INSTITUTION}}</h3><h4 style="color: #444;">{{TITLE}}</h4></div>',
-        'footer_html' => '<div style="margin-top: 50px; display: flex; justify-content: space-between;"><p><strong>Komisijos pirmininkas:</strong> ___________________</p><p><strong>Data:</strong> ' . date('Y-m-d') . '</p></div>',
-        'margin_t' => 20, 'margin_b' => 20, 'margin_l' => 20, 'margin_r' => 20, 'font_size' => 12
-    ];
-}
-
 function get_system_theme() {
     $theme_file = dirname(dirname(__FILE__)) . '/config/theme.json';
     // PATAISYTA (modernizavimas): atnaujinta numatytoji paletė - Indigo/Slate,
