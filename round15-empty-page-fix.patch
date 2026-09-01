@@ -1,0 +1,263 @@
+diff --git a/config/functions.php b/config/functions.php
+index 25dfea5..88a361a 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -185,7 +185,26 @@ function get_print_layout($layout_key = 'protocol') {
+  * (didesnį už 0), jis visada turi pirmenybę prieš automatinį skaičiavimą - tai
+  * leidžia pačiam pakoreguoti, jei automatinis įvertis konkrečiu atveju netikslus.
+  */
+-function calculate_rows_per_page($layout) {
++/**
++ * NAUJA: apskaičiuoja, kiek lentelės eilučių įvertinama telpa į vieną A4 puslapį,
++ * atsižvelgiant į šablone sukonfigūruotas paraštes ir šrifto dydį.
++ *
++ * PATAISYTA: dabar priima $reserve_footer parametrą - poraštė (footer_html, parašai,
++ * data) rodoma TIK PASKUTINIAME dokumento puslapyje, o ne kiekviename atskirai, todėl
++ * tarpiniai puslapiai (be poraštės) gali talpinti daugiau eilučių nei paskutinis
++ * (kuriame reikia palikti vietos porašei). Žr. paginate_with_footer_reserve() žemiau,
++ * kuri naudoja abu variantus kartu, kad sudarytų protingą puslapių skaidymą.
++ *
++ * SVARBU: tai YRA ĮVERTIS, ne tikslus skaičiavimas - naršyklė PHP negrąžina jokios
++ * informacijos apie realų atvaizdavimą. Skaičiavimas apima saugų rezervą, kad greičiau
++ * liktų nepanaudotos vietos puslapio apačioje, nei turinys persilietų į kitą fizinį
++ * lapą be savo puslapio numerio.
++ *
++ * Jei administratorius per print_template.php nustato rankinį 'rows_per_page'
++ * (didesnį už 0), jis visada turi pirmenybę prieš automatinį skaičiavimą - tokiu
++ * atveju $reserve_footer neturi įtakos (naudojama ta pati reikšmė visiems puslapiams).
++ */
++function calculate_rows_per_page($layout, $reserve_footer = false) {
+     if (isset($layout['rows_per_page']) && (int)$layout['rows_per_page'] > 0) {
+         return (int)$layout['rows_per_page'];
+     }
+@@ -197,10 +216,13 @@ function calculate_rows_per_page($layout) {
+     // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes
+     $available_mm = 297 - $margin_t - $margin_b;
+ 
+-    // Rezervas antraštei (header_html) ir poraštei (footer_html + puslapio numeriui) -
+-    // šis turinys kintamas (administratorius jį laisvai redaguoja per HugeRTE), todėl
+-    // tikslus aukštis nežinomas iš anksto - naudojamas pagrįstas įvertis.
+-    $header_footer_buffer_mm = 45;
++    // Rezervas antraštei (header_html, rodoma kiekviename puslapyje) ir puslapio
++    // numeriui - šis turinys kintamas (administratorius jį laisvai redaguoja per
++    // HugeRTE), todėl tikslus aukštis nežinomas iš anksto - naudojamas pagrįstas įvertis.
++    $header_buffer_mm = 25;
++    // Papildomas rezervas porašei (footer_html - parašai, data) - pridedamas TIK
++    // paskutiniam puslapiui, nes tik jame poraštė realiai rodoma.
++    $footer_buffer_mm = $reserve_footer ? 35 : 0;
+ 
+     // Vienos eilutės aukščio įvertis: šrifto dydis (pt -> mm) * eilutės aukščio
+     // koeficientas + langelio vidinis tarpas (6px viršuje ir apačioje, žr. CSS
+@@ -213,10 +235,10 @@ function calculate_rows_per_page($layout) {
+     // Lentelės antraštės eilutė (thead) - panašaus aukščio kaip paprasta eilutė
+     $table_header_mm = $row_height_mm;
+ 
+-    $usable_mm = $available_mm - $header_footer_buffer_mm - $table_header_mm;
++    $usable_mm = $available_mm - $header_buffer_mm - $footer_buffer_mm - $table_header_mm;
+ 
+     if ($row_height_mm <= 0 || $usable_mm <= 0) {
+-        return 15; // saugus atsarginis variantas, jei nustatymai nerealūs
++        return $reserve_footer ? 8 : 15; // saugus atsarginis variantas, jei nustatymai nerealūs
+     }
+ 
+     $rows = (int) floor($usable_mm / $row_height_mm);
+@@ -228,6 +250,67 @@ function calculate_rows_per_page($layout) {
+     return max(3, min(60, $rows));
+ }
+ 
++/**
++ * NAUJA: skaido įrašų sąrašą į puslapius taip, kad poraštei (footer_html - parašai,
++ * data) liktų vietos TIK paskutiniame puslapyje - tarpiniai puslapiai pilnai
++ * užpildomi duomenimis (be poraštės rezervo), o paskutinis puslapis talpina mažiau
++ * eilučių, kad porašė tikrai tilptų po jomis.
++ *
++ * $rows_per_page - kiek eilučių telpa PAPRASTAME (ne paskutiniame) puslapyje
++ * $rows_last_page - kiek eilučių telpa PASKUTINIAME puslapyje (su porašte)
++ *
++ * PATAISYTA: pridėtas "žvilgsnis į priekį" (look-ahead) - anksčiau, kai likusių
++ * įrašų kiekis viršydavo $rows_last_page, bet buvo mažesnis už $rows_per_page,
++ * funkcija paimdavo VISUS likusius įrašus į einamą puslapį (nes jie visi tilpo į
++ * $rows_per_page), palikdama paskutiniam puslapiui TUŠČIĄ masyvą - dėl to
++ * atsirasdavo "fantomas" tuščias paskutinis puslapis su vien tik antrašte ir
++ * porašte, be jokių duomenų eilučių. Dabar, prieš imant pilną $rows_per_page
++ * kiekį, patikrinama, ar po to liks pakankamai įrašų kitiems puslapiams - jei ne,
++ * likę įrašai padalinami maždaug per pusę, kad nė vienas puslapis neliktų
++ * tuščias ar nepagrįstai mažas.
++ */
++function paginate_with_footer_reserve($items, $rows_per_page, $rows_last_page) {
++    $total = count($items);
++    if ($total === 0) {
++        return [[]];
++    }
++
++    $chunks = [];
++    $remaining = $items;
++
++    while (true) {
++        $remaining_count = count($remaining);
++
++        // Jei likę įrašai telpa į paskutinį (su porašte) puslapį - čia ir baigiame.
++        if ($remaining_count <= $rows_last_page) {
++            $chunks[] = $remaining;
++            break;
++        }
++
++        // Patikriname: jei paimtume PILNĄ $rows_per_page kiekį, ar liks pakankamai
++        // įrašų, kad kitas puslapis (paskutinis arba dar vienas tarpinis) NEBŪTŲ
++        // tuščias ar nepagrįstai mažas?
++        if ($remaining_count - $rows_per_page > $rows_last_page) {
++            // Saugu - po šio puslapio liks daugiau nei telpa į paskutinį, vadinasi
++            // bus dar bent vienas normalaus dydžio puslapis.
++            $chunks[] = array_slice($remaining, 0, $rows_per_page);
++            $remaining = array_slice($remaining, $rows_per_page);
++        } else {
++            // Tai priešpaskutinis ir paskutinis puslapiai kartu - padaliname likusius
++            // įrašus maždaug per pusę, kad abu puslapiai gautų protingą, nesutuštėjusį
++            // kiekį (užuot vienam atitekus viskam, o kitam - nieko).
++            $first_part_size = (int) ceil($remaining_count / 2);
++            $first_part_size = min($first_part_size, $rows_per_page);
++            $first_part_size = max($first_part_size, $remaining_count - $rows_last_page);
++
++            $chunks[] = array_slice($remaining, 0, $first_part_size);
++            $remaining = array_slice($remaining, $first_part_size);
++        }
++    }
++
++    return $chunks;
++}
++
+ function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
+     $layout = get_print_layout($layout_key);
+     
+@@ -301,17 +384,27 @@ function generate_printable_table($title, $institution, $headers, $data, $option
+     // nesukaupdavo reikšmės tarp puslapių - visada rodydavo "Puslapis 1" be "iš X".
+     // Dabar naudojami TIKRI PHP apskaičiuoti skaičiai (kviečiantis failas juos jau žino
+     // iš array_chunk() rezultato), perduodami per $options['page_num']/['total_pages'].
++    // Puslapio numeris rodomas KIEKVIENAME puslapyje (jei šablone įjungta) - nepriklauso
++    // nuo to, ar tai paskutinis puslapis.
+     $page_num_html = '';
+     if (isset($layout['show_page_num']) && $layout['show_page_num'] == 1
+         && isset($options['page_num']) && isset($options['total_pages'])) {
+         $page_num_html = '<div class="page-number">Puslapis ' . (int)$options['page_num'] . ' iš ' . (int)$options['total_pages'] . '</div>';
+     }
+-    
+-    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html . '</div>';
+-    // PATAISYTA: puslapio numeris dabar - atskiras elementas, pozicionuojamas absoliučiai
+-    // prie FIZINIO LAPO apačios (žr. .print-wrapper/.page-number CSS žemiau), o ne
+-    // tiesiog po lentelės turiniu (kas anksčiau reiškė, kad jei lentelė nepripildo viso
+-    // lapo, numeris atsirasdavo lapo viduryje, ne apačioje).
++
++    // NAUJA: poraštė (footer_html - parašai, data, komisijos nariai) rodoma TIK
++    // PASKUTINIAME dokumento puslapyje, o ne kiekviename atskirai - tai tikras
++    // dokumento pabaigos elementas, ne kiekvieno puslapio pakartojimas. Kviečiantis
++    // failas nurodo $options['is_last_page'] (žr. paginate_with_footer_reserve()
++    // aukščiau). Jei šis raktas apskritai neperduotas (pvz. vienkartiniai kvietimai
++    // be puslapiavimo - participant_id.php, signature_sheets.php), poraštė rodoma
++    // visada, kaip ir anksčiau (atgalinis suderinamumas).
++    $show_footer = !isset($options['is_last_page']) || $options['is_last_page'] === true;
++    $footer_html_output = $show_footer ? $footer_html : '';
++
++    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html_output . '</div>';
++    // PATAISYTA: puslapio numeris - atskiras elementas, "flex" konteineryje
++    // pastumtas iki fizinio lapo apačios (žr. .print-wrapper/.page-number CSS žemiau).
+     $html .= $page_num_html;
+     $html .= '</div>'; 
+     
+diff --git a/modules/reports/evaluation_sheets.php b/modules/reports/evaluation_sheets.php
+index 9ad47c6..9f2c3f7 100644
+--- a/modules/reports/evaluation_sheets.php
++++ b/modules/reports/evaluation_sheets.php
+@@ -85,14 +85,14 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
+         $headers[] = 'Kitas etapas';
+     }
+     
+-    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai pagal
+-    // realų šablono maketą (paraštes, šrifto dydį), o ne fiksuotas "15" - anksčiau,
+-    // jei turinys realiai netilpdavo į vieną fizinį lapą per 15 eilučių, likusi dalis
+-    // "persiliedavo" į kitą lapą BE savo puslapio numerio (nes numeris priskiriamas
+-    // tik vienam PHP suformuotam "gabalui", ne kiekvienam realiam atspausdintam lapui).
++    // PATAISYTA #2: poraštė (footer_html - parašai, data) turi rodytis TIK dokumento
++    // pabaigoje (paskutiniame puslapyje), o ne kiekviename atskirai. Kadangi tarpiniams
++    // puslapiams (be poraštės) telpa daugiau eilučių nei paskutiniam (su porašte),
++    // naudojame du skirtingus talpos įverčius ir protingą skaidymo funkciją.
+     $print_layout = get_print_layout('evaluation');
+-    $rows_per_page = calculate_rows_per_page($print_layout);
+-    $chunks = array_chunk($participants, $rows_per_page);
++    $rows_per_page = calculate_rows_per_page($print_layout, false);      // tarpiniai puslapiai
++    $rows_last_page = calculate_rows_per_page($print_layout, true);      // paskutinis puslapis (su porašte)
++    $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
+     $total_pages = count($chunks);
+ 
+     foreach ($chunks as $page_num => $chunk) {
+@@ -122,6 +122,8 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
+             'signature_text' => 'Atsakingo asmens parašas',
+             'signature_name' => '',
+             'include_back_button' => false,
++            // NAUJA: poraštė rodoma tik paskutiniame puslapyje
++            'is_last_page' => ($page_num + 1 === $total_pages),
+             // PATAISYTA: puslapio numeris dabar generuojamas VIDUJE generate_printable_table(),
+             // pozicionuojamas prie tikros lapo apačios (žr. config/functions.php), o ne
+             // pridedamas atskirai iškart po lentele.
+diff --git a/modules/reports/protocols.php b/modules/reports/protocols.php
+index 95dbb57..6bdf068 100644
+--- a/modules/reports/protocols.php
++++ b/modules/reports/protocols.php
+@@ -111,14 +111,17 @@ if ($print_mode && !empty($grouped_participants)) {
+         $headers = ['Vieta', 'Mokinio vardas, pavardė', 'Klasė', 'Mokykla', 'Ruošęs mokytojas', 'Balai'];
+     }
+ 
+-    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai (kartą,
+-    // prieš ciklą per olimpiadas) - žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
++    // PATAISYTA #2: du talpos įverčiai (tarpinis/paskutinis puslapis su porašte) -
++    // žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
+     $print_layout = get_print_layout('protocol');
+-    $rows_per_page = calculate_rows_per_page($print_layout);
++    $rows_per_page = calculate_rows_per_page($print_layout, false);
++    $rows_last_page = calculate_rows_per_page($print_layout, true);
+ 
+     foreach ($grouped_participants as $olympiad_name => $participants) {
+         
+-        $chunks = array_chunk($participants, $rows_per_page);
++        // NAUJA: kiekvienai olimpiadai poraštė (parašai) rodoma jos PAČIOS paskutiniame
++        // puslapyje - $total_pages skaičiuojamas atskirai kiekvienai olimpiadai.
++        $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
+         $total_pages = count($chunks);
+ 
+         foreach ($chunks as $page_num => $chunk) {
+@@ -162,6 +165,7 @@ if ($print_mode && !empty($grouped_participants)) {
+                 'signature_name' => '',
+                 'include_back_button' => false,
+                 'back_button_text' => 'Grįžti',
++                'is_last_page' => ($page_num + 1 === $total_pages),
+                 'page_num' => $page_num + 1,
+                 'total_pages' => $total_pages
+             ], 'protocol');
+diff --git a/modules/results/view.php b/modules/results/view.php
+index 8d3ca8f..77e7892 100644
+--- a/modules/results/view.php
++++ b/modules/results/view.php
+@@ -108,11 +108,12 @@ if ($print_mode && !empty($participants)) {
+         $headers[] = 'Kitas etapas';
+     }
+ 
+-    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai pagal
+-    // realų šablono maketą - žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
++    // PATAISYTA #2: poraštė rodoma tik paskutiniame puslapyje - žr. paaiškinimą
++    // modules/reports/evaluation_sheets.php faile.
+     $print_layout = get_print_layout('protocol');
+-    $rows_per_page = calculate_rows_per_page($print_layout);
+-    $chunks = array_chunk($participants, $rows_per_page);
++    $rows_per_page = calculate_rows_per_page($print_layout, false);
++    $rows_last_page = calculate_rows_per_page($print_layout, true);
++    $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
+     $total_pages = count($chunks);
+ 
+     foreach ($chunks as $page_num => $chunk) {
+@@ -147,6 +148,7 @@ if ($print_mode && !empty($participants)) {
+         
+         echo generate_printable_table($olympiad['konkurso_pav'] . ' - Rezultatai', '', $headers, $data, [
+             'include_back_button' => false,
++            'is_last_page' => ($page_num + 1 === $total_pages),
+             'page_num' => $page_num + 1,
+             'total_pages' => $total_pages
+         ], 'protocol');

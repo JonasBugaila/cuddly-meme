@@ -111,14 +111,17 @@ if ($print_mode && !empty($grouped_participants)) {
         $headers = ['Vieta', 'Mokinio vardas, pavardė', 'Klasė', 'Mokykla', 'Ruošęs mokytojas', 'Balai'];
     }
 
-    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai (kartą,
-    // prieš ciklą per olimpiadas) - žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
+    // PATAISYTA #2: du talpos įverčiai (tarpinis/paskutinis puslapis su porašte) -
+    // žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
     $print_layout = get_print_layout('protocol');
-    $rows_per_page = calculate_rows_per_page($print_layout);
+    $rows_per_page = calculate_rows_per_page($print_layout, false);
+    $rows_last_page = calculate_rows_per_page($print_layout, true);
 
     foreach ($grouped_participants as $olympiad_name => $participants) {
         
-        $chunks = array_chunk($participants, $rows_per_page);
+        // NAUJA: kiekvienai olimpiadai poraštė (parašai) rodoma jos PAČIOS paskutiniame
+        // puslapyje - $total_pages skaičiuojamas atskirai kiekvienai olimpiadai.
+        $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
         $total_pages = count($chunks);
 
         foreach ($chunks as $page_num => $chunk) {
@@ -162,6 +165,7 @@ if ($print_mode && !empty($grouped_participants)) {
                 'signature_name' => '',
                 'include_back_button' => false,
                 'back_button_text' => 'Grįžti',
+                'is_last_page' => ($page_num + 1 === $total_pages),
                 'page_num' => $page_num + 1,
                 'total_pages' => $total_pages
             ], 'protocol');

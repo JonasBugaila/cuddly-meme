@@ -108,11 +108,12 @@ if ($print_mode && !empty($participants)) {
         $headers[] = 'Kitas etapas';
     }
 
-    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai pagal
-    // realų šablono maketą - žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
+    // PATAISYTA #2: poraštė rodoma tik paskutiniame puslapyje - žr. paaiškinimą
+    // modules/reports/evaluation_sheets.php faile.
     $print_layout = get_print_layout('protocol');
-    $rows_per_page = calculate_rows_per_page($print_layout);
-    $chunks = array_chunk($participants, $rows_per_page);
+    $rows_per_page = calculate_rows_per_page($print_layout, false);
+    $rows_last_page = calculate_rows_per_page($print_layout, true);
+    $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
     $total_pages = count($chunks);
 
     foreach ($chunks as $page_num => $chunk) {
@@ -147,6 +148,7 @@ if ($print_mode && !empty($participants)) {
         
         echo generate_printable_table($olympiad['konkurso_pav'] . ' - Rezultatai', '', $headers, $data, [
             'include_back_button' => false,
+            'is_last_page' => ($page_num + 1 === $total_pages),
             'page_num' => $page_num + 1,
             'total_pages' => $total_pages
         ], 'protocol');

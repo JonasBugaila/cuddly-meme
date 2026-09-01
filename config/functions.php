@@ -185,7 +185,26 @@ function get_print_layout($layout_key = 'protocol') {
  * (didesnį už 0), jis visada turi pirmenybę prieš automatinį skaičiavimą - tai
  * leidžia pačiam pakoreguoti, jei automatinis įvertis konkrečiu atveju netikslus.
  */
-function calculate_rows_per_page($layout) {
+/**
+ * NAUJA: apskaičiuoja, kiek lentelės eilučių įvertinama telpa į vieną A4 puslapį,
+ * atsižvelgiant į šablone sukonfigūruotas paraštes ir šrifto dydį.
+ *
+ * PATAISYTA: dabar priima $reserve_footer parametrą - poraštė (footer_html, parašai,
+ * data) rodoma TIK PASKUTINIAME dokumento puslapyje, o ne kiekviename atskirai, todėl
+ * tarpiniai puslapiai (be poraštės) gali talpinti daugiau eilučių nei paskutinis
+ * (kuriame reikia palikti vietos porašei). Žr. paginate_with_footer_reserve() žemiau,
+ * kuri naudoja abu variantus kartu, kad sudarytų protingą puslapių skaidymą.
+ *
+ * SVARBU: tai YRA ĮVERTIS, ne tikslus skaičiavimas - naršyklė PHP negrąžina jokios
+ * informacijos apie realų atvaizdavimą. Skaičiavimas apima saugų rezervą, kad greičiau
+ * liktų nepanaudotos vietos puslapio apačioje, nei turinys persilietų į kitą fizinį
+ * lapą be savo puslapio numerio.
+ *
+ * Jei administratorius per print_template.php nustato rankinį 'rows_per_page'
+ * (didesnį už 0), jis visada turi pirmenybę prieš automatinį skaičiavimą - tokiu
+ * atveju $reserve_footer neturi įtakos (naudojama ta pati reikšmė visiems puslapiams).
+ */
+function calculate_rows_per_page($layout, $reserve_footer = false) {
     if (isset($layout['rows_per_page']) && (int)$layout['rows_per_page'] > 0) {
         return (int)$layout['rows_per_page'];
     }
@@ -197,10 +216,13 @@ function calculate_rows_per_page($layout) {
     // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes
     $available_mm = 297 - $margin_t - $margin_b;
 
-    // Rezervas antraštei (header_html) ir poraštei (footer_html + puslapio numeriui) -
-    // šis turinys kintamas (administratorius jį laisvai redaguoja per HugeRTE), todėl
-    // tikslus aukštis nežinomas iš anksto - naudojamas pagrįstas įvertis.
-    $header_footer_buffer_mm = 45;
+    // Rezervas antraštei (header_html, rodoma kiekviename puslapyje) ir puslapio
+    // numeriui - šis turinys kintamas (administratorius jį laisvai redaguoja per
+    // HugeRTE), todėl tikslus aukštis nežinomas iš anksto - naudojamas pagrįstas įvertis.
+    $header_buffer_mm = 25;
+    // Papildomas rezervas porašei (footer_html - parašai, data) - pridedamas TIK
+    // paskutiniam puslapiui, nes tik jame poraštė realiai rodoma.
+    $footer_buffer_mm = $reserve_footer ? 35 : 0;
 
     // Vienos eilutės aukščio įvertis: šrifto dydis (pt -> mm) * eilutės aukščio
     // koeficientas + langelio vidinis tarpas (6px viršuje ir apačioje, žr. CSS
@@ -213,10 +235,10 @@ function calculate_rows_per_page($layout) {
     // Lentelės antraštės eilutė (thead) - panašaus aukščio kaip paprasta eilutė
     $table_header_mm = $row_height_mm;
 
-    $usable_mm = $available_mm - $header_footer_buffer_mm - $table_header_mm;
+    $usable_mm = $available_mm - $header_buffer_mm - $footer_buffer_mm - $table_header_mm;
 
     if ($row_height_mm <= 0 || $usable_mm <= 0) {
-        return 15; // saugus atsarginis variantas, jei nustatymai nerealūs
+        return $reserve_footer ? 8 : 15; // saugus atsarginis variantas, jei nustatymai nerealūs
     }
 
     $rows = (int) floor($usable_mm / $row_height_mm);
@@ -226,6 +248,40 @@ function calculate_rows_per_page($layout) {
     $rows -= 1;
 
     return max(3, min(60, $rows));
+}
+
+/**
+ * NAUJA: skaido įrašų sąrašą į puslapius taip, kad poraštei (footer_html - parašai,
+ * data) liktų vietos TIK paskutiniame puslapyje - tarpiniai puslapiai pilnai
+ * užpildomi duomenimis (be poraštės rezervo), o paskutinis puslapis talpina mažiau
+ * eilučių, kad porašė tikrai tilptų po jomis.
+ *
+ * $rows_per_page - kiek eilučių telpa PAPRASTAME (ne paskutiniame) puslapyje
+ * $rows_last_page - kiek eilučių telpa PASKUTINIAME puslapyje (su porašte)
+ */
+function paginate_with_footer_reserve($items, $rows_per_page, $rows_last_page) {
+    $total = count($items);
+    if ($total === 0) {
+        return [[]];
+    }
+
+    // Jei viskas telpa į vieną (paskutinį, su porašte) puslapį - vienas puslapis užtenka.
+    if ($total <= $rows_last_page) {
+        return [$items];
+    }
+
+    $chunks = [];
+    $remaining = $items;
+
+    // Kol likusių įrašų daugiau, nei tilptų paskutiniame puslapyje - pildome
+    // pilnus tarpinius puslapius (be poraštės rezervo).
+    while (count($remaining) > $rows_last_page) {
+        $chunks[] = array_slice($remaining, 0, $rows_per_page);
+        $remaining = array_slice($remaining, $rows_per_page);
+    }
+    $chunks[] = $remaining; // paskutinis puslapis - su porašte
+
+    return $chunks;
 }
 
 function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
@@ -301,17 +357,27 @@ function generate_printable_table($title, $institution, $headers, $data, $option
     // nesukaupdavo reikšmės tarp puslapių - visada rodydavo "Puslapis 1" be "iš X".
     // Dabar naudojami TIKRI PHP apskaičiuoti skaičiai (kviečiantis failas juos jau žino
     // iš array_chunk() rezultato), perduodami per $options['page_num']/['total_pages'].
+    // Puslapio numeris rodomas KIEKVIENAME puslapyje (jei šablone įjungta) - nepriklauso
+    // nuo to, ar tai paskutinis puslapis.
     $page_num_html = '';
     if (isset($layout['show_page_num']) && $layout['show_page_num'] == 1
         && isset($options['page_num']) && isset($options['total_pages'])) {
         $page_num_html = '<div class="page-number">Puslapis ' . (int)$options['page_num'] . ' iš ' . (int)$options['total_pages'] . '</div>';
     }
-    
-    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html . '</div>';
-    // PATAISYTA: puslapio numeris dabar - atskiras elementas, pozicionuojamas absoliučiai
-    // prie FIZINIO LAPO apačios (žr. .print-wrapper/.page-number CSS žemiau), o ne
-    // tiesiog po lentelės turiniu (kas anksčiau reiškė, kad jei lentelė nepripildo viso
-    // lapo, numeris atsirasdavo lapo viduryje, ne apačioje).
+
+    // NAUJA: poraštė (footer_html - parašai, data, komisijos nariai) rodoma TIK
+    // PASKUTINIAME dokumento puslapyje, o ne kiekviename atskirai - tai tikras
+    // dokumento pabaigos elementas, ne kiekvieno puslapio pakartojimas. Kviečiantis
+    // failas nurodo $options['is_last_page'] (žr. paginate_with_footer_reserve()
+    // aukščiau). Jei šis raktas apskritai neperduotas (pvz. vienkartiniai kvietimai
+    // be puslapiavimo - participant_id.php, signature_sheets.php), poraštė rodoma
+    // visada, kaip ir anksčiau (atgalinis suderinamumas).
+    $show_footer = !isset($options['is_last_page']) || $options['is_last_page'] === true;
+    $footer_html_output = $show_footer ? $footer_html : '';
+
+    $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html_output . '</div>';
+    // PATAISYTA: puslapio numeris - atskiras elementas, "flex" konteineryje
+    // pastumtas iki fizinio lapo apačios (žr. .print-wrapper/.page-number CSS žemiau).
     $html .= $page_num_html;
     $html .= '</div>'; 
     

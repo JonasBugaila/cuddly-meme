@@ -85,14 +85,14 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
         $headers[] = 'Kitas etapas';
     }
     
-    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai pagal
-    // realų šablono maketą (paraštes, šrifto dydį), o ne fiksuotas "15" - anksčiau,
-    // jei turinys realiai netilpdavo į vieną fizinį lapą per 15 eilučių, likusi dalis
-    // "persiliedavo" į kitą lapą BE savo puslapio numerio (nes numeris priskiriamas
-    // tik vienam PHP suformuotam "gabalui", ne kiekvienam realiam atspausdintam lapui).
+    // PATAISYTA #2: poraštė (footer_html - parašai, data) turi rodytis TIK dokumento
+    // pabaigoje (paskutiniame puslapyje), o ne kiekviename atskirai. Kadangi tarpiniams
+    // puslapiams (be poraštės) telpa daugiau eilučių nei paskutiniam (su porašte),
+    // naudojame du skirtingus talpos įverčius ir protingą skaidymo funkciją.
     $print_layout = get_print_layout('evaluation');
-    $rows_per_page = calculate_rows_per_page($print_layout);
-    $chunks = array_chunk($participants, $rows_per_page);
+    $rows_per_page = calculate_rows_per_page($print_layout, false);      // tarpiniai puslapiai
+    $rows_last_page = calculate_rows_per_page($print_layout, true);      // paskutinis puslapis (su porašte)
+    $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
     $total_pages = count($chunks);
 
     foreach ($chunks as $page_num => $chunk) {
@@ -122,6 +122,8 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
             'signature_text' => 'Atsakingo asmens parašas',
             'signature_name' => '',
             'include_back_button' => false,
+            // NAUJA: poraštė rodoma tik paskutiniame puslapyje
+            'is_last_page' => ($page_num + 1 === $total_pages),
             // PATAISYTA: puslapio numeris dabar generuojamas VIDUJE generate_printable_table(),
             // pozicionuojamas prie tikros lapo apačios (žr. config/functions.php), o ne
             // pridedamas atskirai iškart po lentele.
