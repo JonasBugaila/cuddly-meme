@@ -258,21 +258,25 @@ function generate_printable_table($title, $institution, $headers, $data, $option
         @media print {
             .screen-loader { display: none !important; }
             .print-wrapper {
-                position: relative; left: auto; top: auto; visibility: visible; display: block;
-                /* PATAISYTA: .print-wrapper dabar užima visą lapo turinio aukštį (A4, 297mm,
-                   atėmus sukonfigūruotus paraštes) - tai leidžia .page-number elementui
-                   absoliučiai pozicionuotis prie TIKROS fizinio lapo apačios, o ne sekti
-                   iškart po lentelės turinio, jei jis nepripildo viso lapo.
+                left: auto; top: auto; visibility: visible;
+                /* PATAISYTA #2: position:absolute versija sukeldavo problemų, kai turinys
+                   driekiasi per kelis fizinius lapus - naršyklės spausdinimo variklis
+                   kartais netiksliai susieja absoliučiai pozicionuotą elementą su "savu"
+                   puslapiu, todėl VISI puslapiai rodydavo "Puslapis 1". Dabar naudojamas
+                   flexbox su margin-top:auto - elementas lieka NORMALIAME turinio sraute
+                   (nė karto neišimamas iš dokumento), todėl kiekvieno atskiro .print-wrapper
+                   (vieno per kviečiamą generate_printable_table()) numeris lieka patikimai
+                   susietas TIK su savo pačiu turiniu, nepriklausomai nuo kitų puslapių.
                    PASTABA: skaičiavimas daromas A4 formatui (Lietuvoje standartinis) - jei
                    kada nors reikės palaikyti Letter formatą, čia reikėtų atskiro nustatymo. */
+                display: flex;
+                flex-direction: column;
                 min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . (int)($layout['margin_b'] ?? 20) . 'mm);
                 box-sizing: border-box;
             }
             .page-number {
-                position: absolute;
-                left: 0;
-                right: 0;
-                bottom: 0;
+                margin-top: auto;
+                padding-top: 15px;
                 text-align: center;
                 font-size: 10pt;
                 color: #666;
