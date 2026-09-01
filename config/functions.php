@@ -143,25 +143,95 @@ function has_all_keys($array, $keys) {
  * SPAUSDINIMAS
  * =====================================================================
  */
-function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
+/**
+ * NAUJA: iškelta iš generate_printable_table() į atskirą funkciją, kad tą patį
+ * maketą (paraštes, šrifto dydį ir kt.) galėtų nuskaityti ir kviečiantis failas
+ * PRIEŠ duomenų skaidymą į puslapius (žr. calculate_rows_per_page() žemiau) -
+ * anksčiau ši informacija buvo žinoma tik generate_printable_table() viduje,
+ * todėl kviečiantys failai naudodavo fiksuotą, niekaip nesusietą su realiu
+ * šablonu eilučių skaičių (pvz. visada 15 ar 20).
+ */
+function get_print_layout($layout_key = 'protocol') {
     $layout_file = dirname(dirname(__FILE__)) . '/config/print_layout.json';
     $all_layouts = [];
-    
+
     if (file_exists($layout_file)) {
         $all_layouts = json_decode(file_get_contents($layout_file), true) ?: [];
     }
-    
+
     if (isset($all_layouts['header_html']) && !isset($all_layouts['protocol'])) {
         $old_layout = $all_layouts;
         $all_layouts = ['protocol' => $old_layout, 'evaluation' => $old_layout, 'codes' => $old_layout, 'signature' => $old_layout];
     }
 
-    $layout = $all_layouts[$layout_key] ?? ($all_layouts['protocol'] ?? [
-        'header_html' => '<div style="text-align: center; margin-bottom: 20px;"><h3>{{INSTITUTION}}</h3><h4 style="color: #444;">{{TITLE}}</h4></div>', 
-        'footer_html' => '', 
+    return $all_layouts[$layout_key] ?? ($all_layouts['protocol'] ?? [
+        'header_html' => '<div style="text-align: center; margin-bottom: 20px;"><h3>{{INSTITUTION}}</h3><h4 style="color: #444;">{{TITLE}}</h4></div>',
+        'footer_html' => '',
         'margin_t' => 20, 'margin_b' => 20, 'margin_l' => 20, 'margin_r' => 20, 'font_size' => 12
     ]);
+}
+
+/**
+ * NAUJA: apskaičiuoja, kiek lentelės eilučių įvertinama telpa į vieną A4 puslapį,
+ * atsižvelgiant į šablone sukonfigūruotas paraštes ir šrifto dydį.
+ *
+ * SVARBU: tai YRA ĮVERTIS, ne tikslus skaičiavimas - naršyklė PHP negrąžina jokios
+ * informacijos apie realų atvaizdavimą (kiek vietos realiai užima antraštė/poraštė,
+ * kaip naršyklė interpretuoja eilučių aukštį ir pan.). Skaičiavimas apima saugų
+ * rezervą, kad greičiau liktų nepanaudotos vietos puslapio apačioje, nei turinys
+ * persilietų į kitą fizinį lapą be savo puslapio numerio.
+ *
+ * Jei administratorius per print_template.php nustato rankinį 'rows_per_page'
+ * (didesnį už 0), jis visada turi pirmenybę prieš automatinį skaičiavimą - tai
+ * leidžia pačiam pakoreguoti, jei automatinis įvertis konkrečiu atveju netikslus.
+ */
+function calculate_rows_per_page($layout) {
+    if (isset($layout['rows_per_page']) && (int)$layout['rows_per_page'] > 0) {
+        return (int)$layout['rows_per_page'];
+    }
+
+    $margin_t = (int)($layout['margin_t'] ?? 20);
+    $margin_b = (int)($layout['margin_b'] ?? 20);
+    $font_size = (int)($layout['font_size'] ?? 12);
+
+    // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes
+    $available_mm = 297 - $margin_t - $margin_b;
+
+    // Rezervas antraštei (header_html) ir poraštei (footer_html + puslapio numeriui) -
+    // šis turinys kintamas (administratorius jį laisvai redaguoja per HugeRTE), todėl
+    // tikslus aukštis nežinomas iš anksto - naudojamas pagrįstas įvertis.
+    $header_footer_buffer_mm = 45;
+
+    // Vienos eilutės aukščio įvertis: šrifto dydis (pt -> mm) * eilutės aukščio
+    // koeficientas + langelio vidinis tarpas (6px viršuje ir apačioje, žr. CSS
+    // "table.print-table td { padding: 6px 8px; }") + rėmelio storis.
+    $pt_to_mm = 0.3528;
+    $line_height_factor = 1.3;
+    $cell_padding_mm = 12 * 0.2646; // 6px + 6px, 1px ≈ 0.2646mm (96dpi)
+    $row_height_mm = ($font_size * $pt_to_mm * $line_height_factor) + $cell_padding_mm + 0.6;
+
+    // Lentelės antraštės eilutė (thead) - panašaus aukščio kaip paprasta eilutė
+    $table_header_mm = $row_height_mm;
+
+    $usable_mm = $available_mm - $header_footer_buffer_mm - $table_header_mm;
+
+    if ($row_height_mm <= 0 || $usable_mm <= 0) {
+        return 15; // saugus atsarginis variantas, jei nustatymai nerealūs
+    }
+
+    $rows = (int) floor($usable_mm / $row_height_mm);
+
+    // Saugus rezervas - viena eilute mažiau, kad įvertinimo netikslumas
+    // (naršyklių atvaizdavimo skirtumai) nesukeltų persiliejimo į kitą lapą
+    $rows -= 1;
+
+    return max(3, min(60, $rows));
+}
+
+function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
+    $layout = get_print_layout($layout_key);
     
+
     $search = ['{{TITLE}}', '{{INSTITUTION}}', '{{DATE}}'];
     $replace = [htmlspecialchars($title), htmlspecialchars($institution), date('Y-m-d')];
     

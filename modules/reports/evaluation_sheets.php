@@ -85,7 +85,14 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
         $headers[] = 'Kitas etapas';
     }
     
-    $chunks = array_chunk($participants, 15);
+    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai pagal
+    // realų šablono maketą (paraštes, šrifto dydį), o ne fiksuotas "15" - anksčiau,
+    // jei turinys realiai netilpdavo į vieną fizinį lapą per 15 eilučių, likusi dalis
+    // "persiliedavo" į kitą lapą BE savo puslapio numerio (nes numeris priskiriamas
+    // tik vienam PHP suformuotam "gabalui", ne kiekvienam realiam atspausdintam lapui).
+    $print_layout = get_print_layout('evaluation');
+    $rows_per_page = calculate_rows_per_page($print_layout);
+    $chunks = array_chunk($participants, $rows_per_page);
     $total_pages = count($chunks);
 
     foreach ($chunks as $page_num => $chunk) {

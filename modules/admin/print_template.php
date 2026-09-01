@@ -35,7 +35,8 @@ $default_data = [
     'margin_l' => 20,
     'margin_r' => 20,
     'font_size' => 12,
-    'show_page_num' => 1
+    'show_page_num' => 1,
+    'rows_per_page' => 0
 ];
 
 // Saugus failo nuskaitymas ir struktūros atnaujinimas
@@ -69,7 +70,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_layout'])) {
                 'margin_l' => (int)($_POST['margin_l'] ?? 20),
                 'margin_r' => (int)($_POST['margin_r'] ?? 20),
                 'font_size' => (int)($_POST['font_size'] ?? 12),
-                'show_page_num' => isset($_POST['show_page_num']) ? 1 : 0
+                'show_page_num' => isset($_POST['show_page_num']) ? 1 : 0,
+                // NAUJA: neprivalomas rankinis eilučių-per-puslapį nustatymas.
+                // 0 arba tuščia reikšmė = automatinis apskaičiavimas pagal paraštes/šriftą
+                // (žr. config/functions.php calculate_rows_per_page()).
+                'rows_per_page' => (int)($_POST['rows_per_page'] ?? 0)
             ];
             
             file_put_contents($config_file, json_encode($all_layouts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -207,6 +212,14 @@ document.addEventListener("DOMContentLoaded", function() {
                                         <label class="form-check-label fw-bold" for="show_page_num">Rodyti puslapių numerius</label>
                                     </div>
                                     <small class="text-muted d-block mb-3">Įjungus šį nustatymą, kiekvieno spausdinamo lapo apačioje atsiras užrašas „Puslapis 1“.</small>
+
+                                    <hr>
+                                    <label class="form-label fw-bold mb-1" for="rows_per_page">Eilučių skaičius viename puslapyje</label>
+                                    <input type="number" min="0" class="form-control form-control-sm mb-1" id="rows_per_page" name="rows_per_page" value="<?php echo (int)($current_layout['rows_per_page'] ?? 0); ?>">
+                                    <small class="text-muted d-block">
+                                        Palikite <strong>0</strong>, kad sistema pati apskaičiuotų pagal paraštes ir šrifto dydį (įvertis, ne 100% tikslu).
+                                        Jei spausdinant pastebite, kad turinys nesutelpa arba lieka per daug tuščios vietos - įrašykite tikslų skaičių čia.
+                                    </small>
                                 </div>
                             </div>
 

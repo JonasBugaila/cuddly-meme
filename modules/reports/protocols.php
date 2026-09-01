@@ -111,9 +111,14 @@ if ($print_mode && !empty($grouped_participants)) {
         $headers = ['Vieta', 'Mokinio vardas, pavardė', 'Klasė', 'Mokykla', 'Ruošęs mokytojas', 'Balai'];
     }
 
+    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai (kartą,
+    // prieš ciklą per olimpiadas) - žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
+    $print_layout = get_print_layout('protocol');
+    $rows_per_page = calculate_rows_per_page($print_layout);
+
     foreach ($grouped_participants as $olympiad_name => $participants) {
         
-        $chunks = array_chunk($participants, 15);
+        $chunks = array_chunk($participants, $rows_per_page);
         $total_pages = count($chunks);
 
         foreach ($chunks as $page_num => $chunk) {

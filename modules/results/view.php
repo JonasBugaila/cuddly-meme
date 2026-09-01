@@ -108,7 +108,11 @@ if ($print_mode && !empty($participants)) {
         $headers[] = 'Kitas etapas';
     }
 
-    $chunks = array_chunk($participants, 20);
+    // PATAISYTA: eilučių skaičius puslapyje dabar apskaičiuojamas dinamiškai pagal
+    // realų šablono maketą - žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
+    $print_layout = get_print_layout('protocol');
+    $rows_per_page = calculate_rows_per_page($print_layout);
+    $chunks = array_chunk($participants, $rows_per_page);
     $total_pages = count($chunks);
 
     foreach ($chunks as $page_num => $chunk) {
