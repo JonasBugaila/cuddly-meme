@@ -1,0 +1,52 @@
+diff --git a/config/functions.php b/config/functions.php
+index cfbf6c0..e7db1a3 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -213,14 +213,20 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+     $margin_b = (int)($layout['margin_b'] ?? 20);
+     $font_size = (int)($layout['font_size'] ?? 12);
+ 
+-    // NAUJA (STRUKTŪRINIS SPRENDIMAS): 15mm juosta puslapio numeriui rezervuojama
++    // NAUJA (STRUKTŪRINIS SPRENDIMAS): juosta puslapio numeriui rezervuojama
+     // VISADA, nepriklausomai nuo šablono "show_page_num" nustatymo - taip pagrindinio
+     // turinio kiekis (eilučių skaičius puslapyje) NESIKEIČIA vien dėl to, kad kas nors
+     // įjungė/išjungė numeraciją, o pati juosta faktiškai rezervuojama padidinant realią
+     // @page apatinę paraštę (žr. print_document_head()), ne šio skaičiavimo viduje -
+     // ŠIS skaičiavimas tiesiog turi žinoti apie tą patį fiksuotą dydį, kad eilučių
+     // kiekio įvertis atitiktų realiai turimą (sumažintą) turinio plotą.
+-    $page_number_reserve_mm = 15;
++    // PATAISYTA: 15mm -> 25mm - puslapio numeris dabar rodomas NORMALIAME turinio
++    // sraute (position:fixed neveikia patikimai kelioms skirtingoms reikšmėms
++    // spausdinant - naršyklė jas sujungia į vieną pasikartojantį elementą), todėl
++    // jam REIKIA realios vietos sraute (skirtingai nuo position:fixed varianto, kuris
++    // nereikalaudavo jokios papildomos vietos, bet rodydavo neteisingą tekstą). Kad
++    // saugiai tilptų numerio tekstas + linija virš jo + tarpai, rezervas padidintas.
++    $page_number_reserve_mm = 25;
+ 
+     // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes IR fiksuotą puslapio
+     // numerio juostą (žr. aukščiau - visada rezervuojama, net jei numeracija išjungta)
+@@ -254,9 +260,12 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+ 
+     $rows = (int) floor($usable_mm / $row_height_mm);
+ 
+-    // Saugus rezervas - viena eilute mažiau, kad įvertinimo netikslumas
+-    // (naršyklių atvaizdavimo skirtumai) nesukeltų persiliejimo į kitą lapą
+-    $rows -= 1;
++    // Saugus rezervas - kelios eilutės mažiau, kad įvertinimo netikslumas
++    // (naršyklių atvaizdavimo skirtumai) nesukeltų persiliejimo į kitą lapą.
++    // PATAISYTA: 1 -> 2 eilutės, papildoma atsarga (žr. page_number_reserve_mm
++    // padidinimą aukščiau - abu pakeitimai kartu turėtų realiai išspręsti
++    // persiliejimo į tuščią naują lapą problemą).
++    $rows -= 2;
+ 
+     return max(3, min(60, $rows));
+ }
+@@ -352,7 +361,7 @@ function print_document_head($layout_key = 'protocol') {
+     // patekti (naršyklė spausdina tik iki @page paraščių ribos), todėl puslapio
+     // numeris visada telpa toje pačioje vietoje kiekviename lape, nepriklausomai nuo
+     // turinio kiekio ar eilučių skaičiaus įverčio tikslumo.
+-    $page_number_reserve_mm = 15;
++    $page_number_reserve_mm = 25;
+     $effective_margin_b = (int)($layout['margin_b'] ?? 20) + $page_number_reserve_mm;
+ 
+     $html = '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';

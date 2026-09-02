@@ -381,26 +381,19 @@ function print_document_head($layout_key = 'protocol') {
             .screen-loader { display: none !important; }
             .print-wrapper {
                 position: relative; left: auto; top: auto; visibility: visible;
+                display: flex;
+                flex-direction: column;
+                /* PATAISYTA #6: grąžintas flexbox + margin-top:auto, bet šįkart su
+                   TIKRAI pakankamu rezervu (žr. calculate_rows_per_page() -
+                   sąmoningai palieka eilučių mažiau, kad tarp turinio ir konteinerio
+                   apačios visada liktų reali laisva vieta, į kurią "margin-top:auto"
+                   gali patikimai pastumti numerį). Aukštis atitinka TĄ PATĮ sumažintą
+                   plotą, kurį naudoja calculate_rows_per_page() savo skaičiavime. */
+                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
                 box-sizing: border-box;
             }
             .page-number {
-                /* PATAISYTA #5: position:fixed teoriškai turėjo veikti (CSS Paged Media
-                   specifikacijoje kiekvienam puslapiui atskirai), bet REALIOS naršyklės
-                   (Chrome/Firefox) šito nepalaiko taip, kaip specifikacija numato - kai
-                   HTML dokumente yra kelios SKIRTINGOS position:fixed kopijos (po vieną
-                   kiekvienam puslapiui, su skirtingu "Puslapis X iš Y" tekstu), naršyklė
-                   jas SUVIENODINA į vieną pasikartojantį elementą (paskutinį dokumente
-                   rastą) - dėl to VISUOSE puslapiuose rodydavosi ta pati (paskutinio
-                   puslapio) reikšmė. Tai žinomas CSS Paged Media apribojimas realiose
-                   naršyklėse, sprendžiamas tik specializuotais įrankiais (Prince,
-                   WeasyPrint, Paged.js). Grąžinta prie normalaus turinio srauto
-                   pozicionavimo - tai VIENINTELIS metodas, garantuotai rodantis TEISINGĄ
-                   tekstą KIEKVIENAME puslapyje. Vietos, kad numeris nepersiliejtų į kitą
-                   lapą, užtenka dėl padidintos @page apatinės paraštės (žr.
-                   page_number_reserve_mm aukščiau) - net jei numeris nebūtinai
-                   lygiuojasi lygiai su fizine lapo apačia, jis visada telpa toje pačioje
-                   vietoje kaip ir turinys. */
-                margin-top: 15px;
+                margin-top: auto;
                 padding-top: 8px;
                 border-top: 1px solid #ccc;
                 text-align: center;

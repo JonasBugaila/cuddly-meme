@@ -1,0 +1,45 @@
+diff --git a/config/functions.php b/config/functions.php
+index 879f6fd..cfbf6c0 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -375,21 +375,25 @@ function print_document_head($layout_key = 'protocol') {
+                 box-sizing: border-box;
+             }
+             .page-number {
+-                /* PATAISYTA #4: naudojame position:fixed (ne absolute/flexbox) -
+-                   CSS specifikacijoje "paged media" (spausdinimo) kontekste position:fixed
+-                   elemento pozicionavimo atskaitos taškas yra PATS PUSLAPIO LANGAS
+-                   (page box), o ne dokumento peržiūros sritis kaip ekrane - todėl kiekvieno
+-                   atskiro .print-wrapper (vieno per puslapį) numeris patikimai
+-                   "prilimpa" prie TO KONKREČIO puslapio apačios, nepriklausomai nuo to,
+-                   kiek turinio yra virš jo. Kadangi @page apatinė paraštė padidinta
+-                   fiksuotu rezervo dydžiu (žr. $page_number_reserve_mm kintamąjį
+-                   aukščiau), numeris atsiduria virš rezervuotos tuščios juostos -
+-                   niekada nepersidengia su turiniu ir niekada nepatenka į atskirą
+-                   tuščią puslapį. */
+-                position: fixed;
+-                bottom: 0;
+-                left: 0;
+-                right: 0;
++                /* PATAISYTA #5: position:fixed teoriškai turėjo veikti (CSS Paged Media
++                   specifikacijoje kiekvienam puslapiui atskirai), bet REALIOS naršyklės
++                   (Chrome/Firefox) šito nepalaiko taip, kaip specifikacija numato - kai
++                   HTML dokumente yra kelios SKIRTINGOS position:fixed kopijos (po vieną
++                   kiekvienam puslapiui, su skirtingu "Puslapis X iš Y" tekstu), naršyklė
++                   jas SUVIENODINA į vieną pasikartojantį elementą (paskutinį dokumente
++                   rastą) - dėl to VISUOSE puslapiuose rodydavosi ta pati (paskutinio
++                   puslapio) reikšmė. Tai žinomas CSS Paged Media apribojimas realiose
++                   naršyklėse, sprendžiamas tik specializuotais įrankiais (Prince,
++                   WeasyPrint, Paged.js). Grąžinta prie normalaus turinio srauto
++                   pozicionavimo - tai VIENINTELIS metodas, garantuotai rodantis TEISINGĄ
++                   tekstą KIEKVIENAME puslapyje. Vietos, kad numeris nepersiliejtų į kitą
++                   lapą, užtenka dėl padidintos @page apatinės paraštės (žr.
++                   page_number_reserve_mm aukščiau) - net jei numeris nebūtinai
++                   lygiuojasi lygiai su fizine lapo apačia, jis visada telpa toje pačioje
++                   vietoje kaip ir turinys. */
++                margin-top: 15px;
++                padding-top: 8px;
++                border-top: 1px solid #ccc;
+                 text-align: center;
+                 font-size: 10pt;
+                 color: #666;

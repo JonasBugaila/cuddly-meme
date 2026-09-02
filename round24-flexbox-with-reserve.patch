@@ -1,0 +1,105 @@
+diff --git a/config/functions.php b/config/functions.php
+index cfbf6c0..07c038a 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -213,14 +213,14 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+     $margin_b = (int)($layout['margin_b'] ?? 20);
+     $font_size = (int)($layout['font_size'] ?? 12);
+ 
+-    // NAUJA (STRUKTŪRINIS SPRENDIMAS): 15mm juosta puslapio numeriui rezervuojama
++    // NAUJA (STRUKTŪRINIS SPRENDIMAS): juosta puslapio numeriui rezervuojama
+     // VISADA, nepriklausomai nuo šablono "show_page_num" nustatymo - taip pagrindinio
+     // turinio kiekis (eilučių skaičius puslapyje) NESIKEIČIA vien dėl to, kad kas nors
+     // įjungė/išjungė numeraciją, o pati juosta faktiškai rezervuojama padidinant realią
+     // @page apatinę paraštę (žr. print_document_head()), ne šio skaičiavimo viduje -
+     // ŠIS skaičiavimas tiesiog turi žinoti apie tą patį fiksuotą dydį, kad eilučių
+     // kiekio įvertis atitiktų realiai turimą (sumažintą) turinio plotą.
+-    $page_number_reserve_mm = 15;
++    $page_number_reserve_mm = 25;
+ 
+     // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes IR fiksuotą puslapio
+     // numerio juostą (žr. aukščiau - visada rezervuojama, net jei numeracija išjungta)
+@@ -254,9 +254,9 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+ 
+     $rows = (int) floor($usable_mm / $row_height_mm);
+ 
+-    // Saugus rezervas - viena eilute mažiau, kad įvertinimo netikslumas
++    // Saugus rezervas - kelios eilutės mažiau, kad įvertinimo netikslumas
+     // (naršyklių atvaizdavimo skirtumai) nesukeltų persiliejimo į kitą lapą
+-    $rows -= 1;
++    $rows -= 2;
+ 
+     return max(3, min(60, $rows));
+ }
+@@ -345,14 +345,31 @@ function paginate_with_footer_reserve($items, $rows_per_page, $rows_last_page) {
+ function print_document_head($layout_key = 'protocol') {
+     $layout = get_print_layout($layout_key);
+ 
+-    // NAUJA (STRUKTŪRINIS SPRENDIMAS): fiksuota, nuo šablono NEPRIKLAUSANTI juosta
++    // NAUJA (STRUKTŪRINIS SPRENDIMAS #6): fiksuota, nuo šablono NEPRIKLAUSANTI juosta
+     // fizinio lapo apačioje, kurioje rodomas puslapio numeris (arba lieka tuščia,
+     // jei numeracija šablone išjungta). Ši juosta VISADA rezervuojama (didinant
+     // realią @page apatinę paraštę) - taip pagrindinis turinys FIZIŠKAI negali į ją
+-    // patekti (naršyklė spausdina tik iki @page paraščių ribos), todėl puslapio
+-    // numeris visada telpa toje pačioje vietoje kiekviename lape, nepriklausomai nuo
+-    // turinio kiekio ar eilučių skaičiaus įverčio tikslumo.
+-    $page_number_reserve_mm = 15;
++    // patekti (naršyklė spausdina tik iki @page paraščių ribos).
++    //
++    // Ankstesni bandymai:
++    //  1) flexbox + min-height be pakankamo rezervo - turinys prisipildydavo beveik
++    //     iki pat konteinerio krašto, palikdamas "margin-top:auto" beveik nulinę
++    //     laisvą vietą - kartais persiliedavo į atskirą tuščią puslapį.
++    //  2) position:fixed - pozicionavimas veikė be persiliejimo (nes neišimamas iš
++    //     turinio srauto skaičiavimo), BET realios naršyklės (Chrome/Firefox)
++    //     kelias skirtingas position:fixed kopijas (po vieną kiekvienam puslapiui)
++    //     SUVIENODINA į vieną pasikartojantį elementą - visur rodydavosi PASKUTINIO
++    //     puslapio tekstas.
++    //  3) normalus turinio srautas (be flexbox) - teisingas tekstas kiekviename
++    //     puslapyje, bet numeris atsirasdavo IŠKART po turinio, ne prie lapo apačios.
++    //
++    // DABAR: grąžintas flexbox + margin-top:auto (variantas 1), bet šįkart su
++    // TIKRAI pakankamu rezervu (calculate_rows_per_page() dabar sąmoningai palieka
++    // eilučių mažiau, kad tarp turinio ir konteinerio apačios visada liktų reali
++    // laisva vieta, į kurią "margin-top:auto" gali patikimai pastumti numerį).
++    // .print-wrapper aukštis atitinka SUMAŽINTĄ (jau su rezervu) spausdinamą plotą -
++    // tas pats dydis, kurį naudoja ir calculate_rows_per_page() savo skaičiavime.
++    $page_number_reserve_mm = 25;
+     $effective_margin_b = (int)($layout['margin_b'] ?? 20) + $page_number_reserve_mm;
+ 
+     $html = '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';
+@@ -372,26 +389,17 @@ function print_document_head($layout_key = 'protocol') {
+             .screen-loader { display: none !important; }
+             .print-wrapper {
+                 position: relative; left: auto; top: auto; visibility: visible;
++                display: flex;
++                flex-direction: column;
++                /* Aukštis = TAS PATS sumažintas plotas, kurį naudoja
++                   calculate_rows_per_page() (297mm - viršutinė paraštė - PADIDINTA
++                   apatinė paraštė). Kadangi turinio kiekis sąmoningai skaičiuojamas
++                   mažesnis nei šis aukštis, visada liks reali laisva vieta apačioje. */
++                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
+                 box-sizing: border-box;
+             }
+             .page-number {
+-                /* PATAISYTA #5: position:fixed teoriškai turėjo veikti (CSS Paged Media
+-                   specifikacijoje kiekvienam puslapiui atskirai), bet REALIOS naršyklės
+-                   (Chrome/Firefox) šito nepalaiko taip, kaip specifikacija numato - kai
+-                   HTML dokumente yra kelios SKIRTINGOS position:fixed kopijos (po vieną
+-                   kiekvienam puslapiui, su skirtingu "Puslapis X iš Y" tekstu), naršyklė
+-                   jas SUVIENODINA į vieną pasikartojantį elementą (paskutinį dokumente
+-                   rastą) - dėl to VISUOSE puslapiuose rodydavosi ta pati (paskutinio
+-                   puslapio) reikšmė. Tai žinomas CSS Paged Media apribojimas realiose
+-                   naršyklėse, sprendžiamas tik specializuotais įrankiais (Prince,
+-                   WeasyPrint, Paged.js). Grąžinta prie normalaus turinio srauto
+-                   pozicionavimo - tai VIENINTELIS metodas, garantuotai rodantis TEISINGĄ
+-                   tekstą KIEKVIENAME puslapyje. Vietos, kad numeris nepersiliejtų į kitą
+-                   lapą, užtenka dėl padidintos @page apatinės paraštės (žr.
+-                   page_number_reserve_mm aukščiau) - net jei numeris nebūtinai
+-                   lygiuojasi lygiai su fizine lapo apačia, jis visada telpa toje pačioje
+-                   vietoje kaip ir turinys. */
+-                margin-top: 15px;
++                margin-top: auto;
+                 padding-top: 8px;
+                 border-top: 1px solid #ccc;
+                 text-align: center;
