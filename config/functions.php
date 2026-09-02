@@ -381,19 +381,23 @@ function print_document_head($layout_key = 'protocol') {
             .screen-loader { display: none !important; }
             .print-wrapper {
                 position: relative; left: auto; top: auto; visibility: visible;
-                display: flex;
-                flex-direction: column;
-                /* PATAISYTA #6: grąžintas flexbox + margin-top:auto, bet šįkart su
-                   TIKRAI pakankamu rezervu (žr. calculate_rows_per_page() -
-                   sąmoningai palieka eilučių mažiau, kad tarp turinio ir konteinerio
-                   apačios visada liktų reali laisva vieta, į kurią "margin-top:auto"
-                   gali patikimai pastumti numerį). Aukštis atitinka TĄ PATĮ sumažintą
-                   plotą, kurį naudoja calculate_rows_per_page() savo skaičiavime. */
-                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
+                /* PATAISYTA #7: flexbox GALUTINAI atmestas - dokumentuota naršyklių
+                   spausdinimo variklių problema, kad "page-break-after: always"
+                   nepatikimai veikia, kai puslapio turinio konteineris yra flex
+                   konteineris (display:flex ant .print-wrapper). Realiuose testuose
+                   tai pasireiškė kaip puslapio numerio rodymas TIK kas kelias
+                   duomenų "porcijas", o ne kiekviename fiziniame puslapyje - pats
+                   priverstinis lūžis tarp .olympiad-section/.evaluation-section
+                   blokų tapdavo nepatikimas. Grąžinta prie paprasto blokinio
+                   išdėstymo (be flex) - su šiuo variantu page-break-after veikė
+                   patikimai (patvirtinta ankstesniuose testuose), tik numeris
+                   nebūtinai lygiuojasi lygiai su fizine lapo apačia (žr. .page-number
+                   žemiau - tai sąmoningas kompromisas, žr. calculate_rows_per_page()
+                   dėl rezervuotos vietos skaičiavimo). */
                 box-sizing: border-box;
             }
             .page-number {
-                margin-top: auto;
+                margin-top: 15px;
                 padding-top: 8px;
                 border-top: 1px solid #ccc;
                 text-align: center;
