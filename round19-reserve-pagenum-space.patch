@@ -1,0 +1,36 @@
+diff --git a/config/functions.php b/config/functions.php
+index d5c2feb..4bdf488 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -216,10 +216,19 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+     // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes
+     $available_mm = 297 - $margin_t - $margin_b;
+ 
+-    // Rezervas antraštei (header_html, rodoma kiekviename puslapyje) ir puslapio
+-    // numeriui - šis turinys kintamas (administratorius jį laisvai redaguoja per
+-    // HugeRTE), todėl tikslus aukštis nežinomas iš anksto - naudojamas pagrįstas įvertis.
++    // Rezervas antraštei (header_html, rodoma kiekviename puslapyje) - šis turinys
++    // kintamas (administratorius jį laisvai redaguoja per HugeRTE), todėl tikslus
++    // aukštis nežinomas iš anksto - naudojamas pagrįstas įvertis.
+     $header_buffer_mm = 25;
++
++    // PATAISYTA: PRIDĖTAS atskiras rezervas pačiam puslapio numerio užrašui
++    // ("Puslapis X iš Y" + linija virš jo + tarpai) - anksčiau šis rezervas
++    // NEBUVO skaičiuojamas atskirai (nors komentaras aukščiau klaidingai teigė,
++    // kad $header_buffer_mm jį apima), todėl paskutinė duomenų eilutė užpildydavo
++    // lapą IKI PAT KRAŠTO, o puslapio numeriui nebelikdavo vietos - jis
++    // persiliedavo į atskirą, tuščią naują lapą vienas pats.
++    $page_number_buffer_mm = (isset($layout['show_page_num']) && $layout['show_page_num'] == 1) ? 15 : 0;
++
+     // Papildomas rezervas porašei (footer_html - parašai, data) - pridedamas TIK
+     // paskutiniam puslapiui, nes tik jame poraštė realiai rodoma.
+     $footer_buffer_mm = $reserve_footer ? 35 : 0;
+@@ -235,7 +244,7 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+     // Lentelės antraštės eilutė (thead) - panašaus aukščio kaip paprasta eilutė
+     $table_header_mm = $row_height_mm;
+ 
+-    $usable_mm = $available_mm - $header_buffer_mm - $footer_buffer_mm - $table_header_mm;
++    $usable_mm = $available_mm - $header_buffer_mm - $footer_buffer_mm - $page_number_buffer_mm - $table_header_mm;
+ 
+     if ($row_height_mm <= 0 || $usable_mm <= 0) {
+         return $reserve_footer ? 8 : 15; // saugus atsarginis variantas, jei nustatymai nerealūs
