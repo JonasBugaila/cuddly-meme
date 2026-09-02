@@ -116,6 +116,8 @@ if ($print_mode && !empty($participants)) {
     $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
     $total_pages = count($chunks);
 
+    echo print_document_head('protocol');
+
     foreach ($chunks as $page_num => $chunk) {
         $data = [];
         foreach ($chunk as $p) {
@@ -146,7 +148,7 @@ if ($print_mode && !empty($participants)) {
 
         echo '<div class="olympiad-section" style="page-break-after: always;">';
         
-        echo generate_printable_table($olympiad['konkurso_pav'] . ' - Rezultatai', '', $headers, $data, [
+        echo generate_printable_page($olympiad['konkurso_pav'] . ' - Rezultatai', '', $headers, $data, [
             'include_back_button' => false,
             'is_last_page' => ($page_num + 1 === $total_pages),
             'page_num' => $page_num + 1,
@@ -155,6 +157,8 @@ if ($print_mode && !empty($participants)) {
         
         echo '</div>';
     }
+
+    echo print_document_foot();
 
     exit;
 }

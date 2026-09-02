@@ -311,57 +311,127 @@ function paginate_with_footer_reserve($items, $rows_per_page, $rows_last_page) {
     return $chunks;
 }
 
-function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
+/**
+ * NAUJA (STRUKTŪRINIS PATAISYMAS): spausdinimo dokumento PRADŽIA - grąžina tinkamą
+ * HTML5 dokumento pradžią (<!DOCTYPE>, <html>, <head> su VIENU konsoliduotu <style>
+ * bloku, </head>, <body>) PLIUS spausdinimo skriptą ir kraunimo animaciją.
+ *
+ * SVARBU: anksčiau visas šis turinys (skriptas, kraunimo animacija, <style> blokas)
+ * būdavo įterpiamas PER KIEKVIENĄ generate_printable_table() iškvietimą atskirai (per
+ * "static $base_injected" apsaugą, kuri turėjo veikti tik VIENĄ kartą), o galutinis
+ * spausdinimo turinys apskritai NETURĖJO <!DOCTYPE html><html><head></head><body>
+ * apvalkalo - buvo tiesiog eilė sujungtų HTML fragmentų. Toks "be galvos" (be <head>)
+ * dokumentas naršyklei yra netaisyklingas HTML, todėl <style> blokų (kurie kartodavosi
+ * kiekviename puslapyje) taikymo tvarka ir spausdinimo puslapių skaičiavimas tapdavo
+ * nenuspėjamas - tai buvo tikroji priežastis, kodėl kai kurie puslapiai spausdinime
+ * atrodydavo tušti arba su netinkamai išdėstytu turiniu.
+ *
+ * Naudojimas kviečiančiame faile (kelių puslapių atveju):
+ *   echo print_document_head($layout_key);
+ *   foreach ($chunks as ...) { echo generate_printable_page(...); }
+ *   echo print_document_foot();
+ */
+function print_document_head($layout_key = 'protocol') {
     $layout = get_print_layout($layout_key);
-    
+
+    $html = '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';
+
+    $html .= '<style>
+        body { margin: 0; padding: 0; }
+        table.print-table { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
+        table.print-table th, table.print-table td { border: 1px solid #222; padding: 6px 8px; }
+
+        @media screen {
+            .print-wrapper {
+                position: absolute; left: -9999px; top: -9999px; visibility: hidden;
+            }
+        }
+
+        @media print {
+            .screen-loader { display: none !important; }
+            .print-wrapper {
+                position: relative; left: auto; top: auto; visibility: visible;
+                display: flex;
+                flex-direction: column;
+                /* PASTABA: skaičiavimas daromas A4 formatui (Lietuvoje standartinis) */
+                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . (int)($layout['margin_b'] ?? 20) . 'mm);
+                box-sizing: border-box;
+            }
+            .page-number {
+                margin-top: auto;
+                padding-top: 15px;
+                text-align: center;
+                font-size: 10pt;
+                color: #666;
+            }
+            body {
+                background: #fff !important; padding: 0 !important;
+                font-family: "Times New Roman", Times, serif;
+                font-size: ' . (int)($layout['font_size'] ?? 12) . 'pt !important;
+            }
+            @page {
+                margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)($layout['margin_r'] ?? 20) . 'mm ' . (int)($layout['margin_b'] ?? 20) . 'mm ' . (int)($layout['margin_l'] ?? 20) . 'mm;
+            }
+        }
+    </style>';
+
+    $html .= '</head><body>';
+
+    $html .= '<script>
+        document.addEventListener("DOMContentLoaded", function() {
+            setTimeout(function() {
+                window.print();
+            }, 400);
+            window.onafterprint = function() {
+                setTimeout(function() {
+                    if (window.history.length > 1) {
+                        window.history.back();
+                    } else {
+                        window.close();
+                    }
+                }, 100);
+            };
+        });
+    </script>';
+
+    $html .= '<div class="screen-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f8f9fc; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; font-family: sans-serif;">';
+    $html .= '<div style="margin-bottom: 20px;"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4e73df" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg></div>';
+    $html .= '<h2 style="color: #333; margin: 0; font-size: 24px;">Ruošiamas spausdinimo langas...</h2>';
+    $html .= '<p style="color: #6c757d; margin-top: 10px;">Tuoj atsidarys peržiūra.</p>';
+    $html .= '<div style="margin-top: 25px; display: flex; gap: 10px;">';
+    $html .= '<button onclick="window.history.back()" style="padding: 10px 20px; background: #e74a3b; color: white; border: none; border-radius: 4px; cursor: pointer;">Atšaukti ir grįžti</button>';
+    $html .= '</div>';
+    $html .= '</div>';
+
+    return $html;
+}
+
+/**
+ * NAUJA: spausdinimo dokumento PABAIGA - uždaro </body></html>.
+ */
+function print_document_foot() {
+    return '</body></html>';
+}
+
+/**
+ * NAUJA: grąžina VIENO puslapio turinį (.print-wrapper su antrašte, lentele,
+ * porašte ir puslapio numeriu) - BE jokio <style>/<script>/kraunimo animacijos.
+ * Naudoti kartu su print_document_head()/print_document_foot() kelių puslapių atveju.
+ */
+function generate_printable_page($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
+    $layout = get_print_layout($layout_key);
 
     $search = ['{{TITLE}}', '{{INSTITUTION}}', '{{DATE}}'];
     $replace = [htmlspecialchars($title), htmlspecialchars($institution), date('Y-m-d')];
-    
+
     $header_html = str_replace($search, $replace, $layout['header_html'] ?? '');
     $footer_html = str_replace($search, $replace, $layout['footer_html'] ?? '');
-    
-    $html = '';
-    
-    static $base_injected = false;
-    if (!$base_injected) {
-        $html .= '<script>
-            document.addEventListener("DOMContentLoaded", function() {
-                // Truputis laiko dokumentui užsikrauti
-                setTimeout(function() {
-                    window.print();
-                }, 400);
-                
-                // Atšaukus ar atspausdinus visada grįšime atgal (toje pačioje kortelėje)
-                window.onafterprint = function() {
-                    setTimeout(function() {
-                        if (window.history.length > 1) {
-                            window.history.back();
-                        } else {
-                            window.close(); // Atsarginis variantas
-                        }
-                    }, 100);
-                };
-            });
-        </script>';
 
-        $html .= '<div class="screen-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f8f9fc; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; font-family: sans-serif;">';
-        $html .= '<div style="margin-bottom: 20px;"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#4e73df" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg></div>';
-        $html .= '<h2 style="color: #333; margin: 0; font-size: 24px;">Ruošiamas spausdinimo langas...</h2>';
-        $html .= '<p style="color: #6c757d; margin-top: 10px;">Tuoj atsidarys peržiūra.</p>';
-        $html .= '<div style="margin-top: 25px; display: flex; gap: 10px;">';
-        $html .= '<button onclick="window.history.back()" style="padding: 10px 20px; background: #e74a3b; color: white; border: none; border-radius: 4px; cursor: pointer;">Atšaukti ir grįžti</button>';
-        $html .= '</div>';
-        $html .= '</div>';
-        
-        $base_injected = true;
-    }
-    
     $print_id = 'print_' . uniqid();
-    
-    $html .= '<div id="' . $print_id . '_printable" class="print-wrapper">';
+
+    $html = '<div id="' . $print_id . '_printable" class="print-wrapper">';
     $html .= '<div class="print-header">' . $header_html . '</div>';
-    
+
     $html .= '<table class="table print-table w-100">';
     $html .= '<thead class="table-light"><tr>';
     foreach ($headers as $header_text) {
@@ -376,85 +446,35 @@ function generate_printable_table($title, $institution, $headers, $data, $option
         $html .= '</tr>';
     }
     $html .= '</tbody></table>';
-    
-    // PATAISYTA: anksčiau čia buvo naudojamas CSS skaitiklis (counter(page)), kuris
-    // buvo sugadintas - kadangi generate_printable_table() kviečiama PO KARTĄ kiekvienam
-    // puslapiui atskirai (per array_chunk() ciklą kviečiančiame faile), kiekvienas
-    // .print-wrapper turėjo savo "counter-reset: page", todėl skaitiklis niekada
-    // nesukaupdavo reikšmės tarp puslapių - visada rodydavo "Puslapis 1" be "iš X".
-    // Dabar naudojami TIKRI PHP apskaičiuoti skaičiai (kviečiantis failas juos jau žino
-    // iš array_chunk() rezultato), perduodami per $options['page_num']/['total_pages'].
-    // Puslapio numeris rodomas KIEKVIENAME puslapyje (jei šablone įjungta) - nepriklauso
-    // nuo to, ar tai paskutinis puslapis.
+
     $page_num_html = '';
     if (isset($layout['show_page_num']) && $layout['show_page_num'] == 1
         && isset($options['page_num']) && isset($options['total_pages'])) {
         $page_num_html = '<div class="page-number">Puslapis ' . (int)$options['page_num'] . ' iš ' . (int)$options['total_pages'] . '</div>';
     }
 
-    // NAUJA: poraštė (footer_html - parašai, data, komisijos nariai) rodoma TIK
-    // PASKUTINIAME dokumento puslapyje, o ne kiekviename atskirai - tai tikras
-    // dokumento pabaigos elementas, ne kiekvieno puslapio pakartojimas. Kviečiantis
-    // failas nurodo $options['is_last_page'] (žr. paginate_with_footer_reserve()
-    // aukščiau). Jei šis raktas apskritai neperduotas (pvz. vienkartiniai kvietimai
-    // be puslapiavimo - participant_id.php, signature_sheets.php), poraštė rodoma
-    // visada, kaip ir anksčiau (atgalinis suderinamumas).
     $show_footer = !isset($options['is_last_page']) || $options['is_last_page'] === true;
     $footer_html_output = $show_footer ? $footer_html : '';
 
     $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html_output . '</div>';
-    // PATAISYTA: puslapio numeris - atskiras elementas, "flex" konteineryje
-    // pastumtas iki fizinio lapo apačios (žr. .print-wrapper/.page-number CSS žemiau).
     $html .= $page_num_html;
-    $html .= '</div>'; 
-    
-    $html .= '<style>
-        table.print-table { border-collapse: collapse; margin-bottom: 20px; width: 100%; }
-        table.print-table th, table.print-table td { border: 1px solid #222; padding: 6px 8px; }
-        
-        @media screen {
-            .print-wrapper { 
-                position: absolute; left: -9999px; top: -9999px; visibility: hidden;
-            }
-        }
-        
-        @media print {
-            .screen-loader { display: none !important; }
-            .print-wrapper {
-                left: auto; top: auto; visibility: visible;
-                /* PATAISYTA #2: position:absolute versija sukeldavo problemų, kai turinys
-                   driekiasi per kelis fizinius lapus - naršyklės spausdinimo variklis
-                   kartais netiksliai susieja absoliučiai pozicionuotą elementą su "savu"
-                   puslapiu, todėl VISI puslapiai rodydavo "Puslapis 1". Dabar naudojamas
-                   flexbox su margin-top:auto - elementas lieka NORMALIAME turinio sraute
-                   (nė karto neišimamas iš dokumento), todėl kiekvieno atskiro .print-wrapper
-                   (vieno per kviečiamą generate_printable_table()) numeris lieka patikimai
-                   susietas TIK su savo pačiu turiniu, nepriklausomai nuo kitų puslapių.
-                   PASTABA: skaičiavimas daromas A4 formatui (Lietuvoje standartinis) - jei
-                   kada nors reikės palaikyti Letter formatą, čia reikėtų atskiro nustatymo. */
-                display: flex;
-                flex-direction: column;
-                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . (int)($layout['margin_b'] ?? 20) . 'mm);
-                box-sizing: border-box;
-            }
-            .page-number {
-                margin-top: auto;
-                padding-top: 15px;
-                text-align: center;
-                font-size: 10pt;
-                color: #666;
-            }
-            body { 
-                background: #fff !important; padding: 0 !important;
-                font-family: "Times New Roman", Times, serif;
-                font-size: ' . (int)($layout['font_size'] ?? 12) . 'pt !important; 
-            }
-            @page { 
-                margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)($layout['margin_r'] ?? 20) . 'mm ' . (int)($layout['margin_b'] ?? 20) . 'mm ' . (int)($layout['margin_l'] ?? 20) . 'mm; 
-            }
-        }
-    </style>';
-    
+    $html .= '</div>';
+
+    return $html;
+}
+
+/**
+ * PATAISYTA (STRUKTŪRINIS): dabar tiesiog sudeda print_document_head() +
+ * generate_printable_page() + print_document_foot() į VIENĄ savarankišką dokumentą -
+ * tinka vienpuslapiam naudojimui vienu iškvietimu (participant_id.php,
+ * signature_sheets.php, school_olympiad_report_V2.php). Kelių puslapių atveju
+ * (protocols.php, evaluation_sheets.php, results/view.php) naudokite tris atskiras
+ * funkcijas tiesiogiai - žr. print_document_head() komentarą aukščiau.
+ */
+function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
+    $html = print_document_head($layout_key);
+    $html .= generate_printable_page($title, $institution, $headers, $data, $options, $layout_key);
+    $html .= print_document_foot();
     return $html;
 }
 

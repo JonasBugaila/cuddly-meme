@@ -95,6 +95,11 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
     $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
     $total_pages = count($chunks);
 
+    // NAUJA: tinkamos HTML5 dokumento pradžios (<!DOCTYPE>, <head> su vienu <style>
+    // bloku) atspausdinimas VIENĄ kartą prieš visus puslapius - žr. paaiškinimą
+    // config/functions.php -> print_document_head().
+    echo print_document_head('evaluation');
+
     foreach ($chunks as $page_num => $chunk) {
         $data = [];
         foreach ($chunk as $participant) {
@@ -118,21 +123,19 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
         }
 
         echo '<div class="evaluation-section" style="page-break-after: always;">';
-        echo generate_printable_table($selected_olympiad, '', $headers, $data, [
+        echo generate_printable_page($selected_olympiad, '', $headers, $data, [
             'signature_text' => 'Atsakingo asmens parašas',
             'signature_name' => '',
             'include_back_button' => false,
-            // NAUJA: poraštė rodoma tik paskutiniame puslapyje
             'is_last_page' => ($page_num + 1 === $total_pages),
-            // PATAISYTA: puslapio numeris dabar generuojamas VIDUJE generate_printable_table(),
-            // pozicionuojamas prie tikros lapo apačios (žr. config/functions.php), o ne
-            // pridedamas atskirai iškart po lentele.
             'page_num' => $page_num + 1,
             'total_pages' => $total_pages
         ], 'evaluation');
         
         echo '</div>';
     }
+
+    echo print_document_foot();
     exit; 
 }
 

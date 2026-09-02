@@ -117,6 +117,11 @@ if ($print_mode && !empty($grouped_participants)) {
     $rows_per_page = calculate_rows_per_page($print_layout, false);
     $rows_last_page = calculate_rows_per_page($print_layout, true);
 
+    // NAUJA: viena bendra dokumento pradžia (<!DOCTYPE>, vienas <style> blokas) visoms
+    // olimpiadoms kartu, ne kiekvienai atskirai - žr. paaiškinimą
+    // config/functions.php -> print_document_head().
+    echo print_document_head('protocol');
+
     foreach ($grouped_participants as $olympiad_name => $participants) {
         
         // NAUJA: kiekvienai olimpiadai poraštė (parašai) rodoma jos PAČIOS paskutiniame
@@ -160,7 +165,7 @@ if ($print_mode && !empty($grouped_participants)) {
             echo '<div class="olympiad-section" style="page-break-after: always;">';
             
             // IŠTAISYTA: Pridėtas 'protocol' parametras spausdinimo funkcijai
-            echo generate_printable_table($olympiad_name, '', $headers, $data, [
+            echo generate_printable_page($olympiad_name, '', $headers, $data, [
                 'signature_text' => 'Atsakingo asmens parašas',
                 'signature_name' => '',
                 'include_back_button' => false,
@@ -173,6 +178,8 @@ if ($print_mode && !empty($grouped_participants)) {
             echo '</div>';
         }
     }
+
+    echo print_document_foot();
 
     exit; // Nutraukiame vykdymą, kad neužkrautų vizualinės dalies spausdinimo metu
 }
