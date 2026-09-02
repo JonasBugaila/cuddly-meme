@@ -258,6 +258,16 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
  *
  * $rows_per_page - kiek eilučių telpa PAPRASTAME (ne paskutiniame) puslapyje
  * $rows_last_page - kiek eilučių telpa PASKUTINIAME puslapyje (su porašte)
+ *
+ * PATAISYTA: pridėtas "žvilgsnis į priekį" (look-ahead) - anksčiau, kai likusių
+ * įrašų kiekis viršydavo $rows_last_page, bet buvo mažesnis už $rows_per_page,
+ * funkcija paimdavo VISUS likusius įrašus į einamą puslapį (nes jie visi tilpo į
+ * $rows_per_page), palikdama paskutiniam puslapiui TUŠČIĄ masyvą - dėl to
+ * atsirasdavo "fantomas" tuščias paskutinis puslapis su vien tik antrašte ir
+ * porašte, be jokių duomenų eilučių. Dabar, prieš imant pilną $rows_per_page
+ * kiekį, patikrinama, ar po to liks pakankamai įrašų kitiems puslapiams - jei ne,
+ * likę įrašai padalinami maždaug per pusę, kad nė vienas puslapis neliktų
+ * tuščias ar nepagrįstai mažas.
  */
 function paginate_with_footer_reserve($items, $rows_per_page, $rows_last_page) {
     $total = count($items);
@@ -265,21 +275,38 @@ function paginate_with_footer_reserve($items, $rows_per_page, $rows_last_page) {
         return [[]];
     }
 
-    // Jei viskas telpa į vieną (paskutinį, su porašte) puslapį - vienas puslapis užtenka.
-    if ($total <= $rows_last_page) {
-        return [$items];
-    }
-
     $chunks = [];
     $remaining = $items;
 
-    // Kol likusių įrašų daugiau, nei tilptų paskutiniame puslapyje - pildome
-    // pilnus tarpinius puslapius (be poraštės rezervo).
-    while (count($remaining) > $rows_last_page) {
-        $chunks[] = array_slice($remaining, 0, $rows_per_page);
-        $remaining = array_slice($remaining, $rows_per_page);
+    while (true) {
+        $remaining_count = count($remaining);
+
+        // Jei likę įrašai telpa į paskutinį (su porašte) puslapį - čia ir baigiame.
+        if ($remaining_count <= $rows_last_page) {
+            $chunks[] = $remaining;
+            break;
+        }
+
+        // Patikriname: jei paimtume PILNĄ $rows_per_page kiekį, ar liks pakankamai
+        // įrašų, kad kitas puslapis (paskutinis arba dar vienas tarpinis) NEBŪTŲ
+        // tuščias ar nepagrįstai mažas?
+        if ($remaining_count - $rows_per_page > $rows_last_page) {
+            // Saugu - po šio puslapio liks daugiau nei telpa į paskutinį, vadinasi
+            // bus dar bent vienas normalaus dydžio puslapis.
+            $chunks[] = array_slice($remaining, 0, $rows_per_page);
+            $remaining = array_slice($remaining, $rows_per_page);
+        } else {
+            // Tai priešpaskutinis ir paskutinis puslapiai kartu - padaliname likusius
+            // įrašus maždaug per pusę, kad abu puslapiai gautų protingą, nesutuštėjusį
+            // kiekį (užuot vienam atitekus viskam, o kitam - nieko).
+            $first_part_size = (int) ceil($remaining_count / 2);
+            $first_part_size = min($first_part_size, $rows_per_page);
+            $first_part_size = max($first_part_size, $remaining_count - $rows_last_page);
+
+            $chunks[] = array_slice($remaining, 0, $first_part_size);
+            $remaining = array_slice($remaining, $first_part_size);
+        }
     }
-    $chunks[] = $remaining; // paskutinis puslapis - su porašte
 
     return $chunks;
 }
