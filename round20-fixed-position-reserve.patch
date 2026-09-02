@@ -1,0 +1,113 @@
+diff --git a/config/functions.php b/config/functions.php
+index 1de3899..a140019 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -213,22 +213,24 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+     $margin_b = (int)($layout['margin_b'] ?? 20);
+     $font_size = (int)($layout['font_size'] ?? 12);
+ 
+-    // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes
+-    $available_mm = 297 - $margin_t - $margin_b;
++    // NAUJA (STRUKTŪRINIS SPRENDIMAS): 15mm juosta puslapio numeriui rezervuojama
++    // VISADA, nepriklausomai nuo šablono "show_page_num" nustatymo - taip pagrindinio
++    // turinio kiekis (eilučių skaičius puslapyje) NESIKEIČIA vien dėl to, kad kas nors
++    // įjungė/išjungė numeraciją, o pati juosta faktiškai rezervuojama padidinant realią
++    // @page apatinę paraštę (žr. print_document_head()), ne šio skaičiavimo viduje -
++    // ŠIS skaičiavimas tiesiog turi žinoti apie tą patį fiksuotą dydį, kad eilučių
++    // kiekio įvertis atitiktų realiai turimą (sumažintą) turinio plotą.
++    $page_number_reserve_mm = 15;
++
++    // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes IR fiksuotą puslapio
++    // numerio juostą (žr. aukščiau - visada rezervuojama, net jei numeracija išjungta)
++    $available_mm = 297 - $margin_t - $margin_b - $page_number_reserve_mm;
+ 
+     // Rezervas antraštei (header_html, rodoma kiekviename puslapyje) - šis turinys
+     // kintamas (administratorius jį laisvai redaguoja per HugeRTE), todėl tikslus
+     // aukštis nežinomas iš anksto - naudojamas pagrįstas įvertis.
+     $header_buffer_mm = 25;
+ 
+-    // PATAISYTA: PRIDĖTAS atskiras rezervas pačiam puslapio numerio užrašui
+-    // ("Puslapis X iš Y" + linija virš jo + tarpai) - anksčiau šis rezervas
+-    // NEBUVO skaičiuojamas atskirai (nors komentaras aukščiau klaidingai teigė,
+-    // kad $header_buffer_mm jį apima), todėl paskutinė duomenų eilutė užpildydavo
+-    // lapą IKI PAT KRAŠTO, o puslapio numeriui nebelikdavo vietos - jis
+-    // persiliedavo į atskirą, tuščią naują lapą vienas pats.
+-    $page_number_buffer_mm = (isset($layout['show_page_num']) && $layout['show_page_num'] == 1) ? 15 : 0;
+-
+     // Papildomas rezervas porašei (footer_html - parašai, data) - pridedamas TIK
+     // paskutiniam puslapiui, nes tik jame poraštė realiai rodoma.
+     $footer_buffer_mm = $reserve_footer ? 35 : 0;
+@@ -244,7 +246,7 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+     // Lentelės antraštės eilutė (thead) - panašaus aukščio kaip paprasta eilutė
+     $table_header_mm = $row_height_mm;
+ 
+-    $usable_mm = $available_mm - $header_buffer_mm - $footer_buffer_mm - $page_number_buffer_mm - $table_header_mm;
++    $usable_mm = $available_mm - $header_buffer_mm - $footer_buffer_mm - $table_header_mm;
+ 
+     if ($row_height_mm <= 0 || $usable_mm <= 0) {
+         return $reserve_footer ? 8 : 15; // saugus atsarginis variantas, jei nustatymai nerealūs
+@@ -343,6 +345,16 @@ function paginate_with_footer_reserve($items, $rows_per_page, $rows_last_page) {
+ function print_document_head($layout_key = 'protocol') {
+     $layout = get_print_layout($layout_key);
+ 
++    // NAUJA (STRUKTŪRINIS SPRENDIMAS): fiksuota, nuo šablono NEPRIKLAUSANTI juosta
++    // fizinio lapo apačioje, kurioje rodomas puslapio numeris (arba lieka tuščia,
++    // jei numeracija šablone išjungta). Ši juosta VISADA rezervuojama (didinant
++    // realią @page apatinę paraštę) - taip pagrindinis turinys FIZIŠKAI negali į ją
++    // patekti (naršyklė spausdina tik iki @page paraščių ribos), todėl puslapio
++    // numeris visada telpa toje pačioje vietoje kiekviename lape, nepriklausomai nuo
++    // turinio kiekio ar eilučių skaičiaus įverčio tikslumo.
++    $page_number_reserve_mm = 15;
++    $effective_margin_b = (int)($layout['margin_b'] ?? 20) + $page_number_reserve_mm;
++
+     $html = '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';
+ 
+     $html .= '<style>
+@@ -360,23 +372,24 @@ function print_document_head($layout_key = 'protocol') {
+             .screen-loader { display: none !important; }
+             .print-wrapper {
+                 position: relative; left: auto; top: auto; visibility: visible;
+-                /* PATAISYTA #3: anksčiau naudotas flexbox + min-height + margin-top:auto,
+-                   kad puslapio numeris būtų pastumtas iki TIKSLIOS fizinio lapo apačios -
+-                   tai pasirodė nepatikima: kai turinys artėja prie lapo ribos, naršyklės
+-                   spausdinimo variklis kartais nuspręsdavo perkelti pastumtą elementą į
+-                   ATSKIRĄ, tuščią naują lapą, vietoj to, kad paliktų jį toje pačioje
+-                   vietoje (žinoma, dokumentuota CSS spausdinimo problema, derinant
+-                   flexbox su puslapių lūžiais "page-break-after"). Dabar numeris tiesiog
+-                   seka iš karto po turinio pabaigos normaliame sraute - garantuotai
+-                   nesukuria papildomo tuščio puslapio, nors ir nebūtinai tiksliai lygiuojasi
+-                   su fizine lapo apačia (tikslus lygiavimas be specializuotos puslapiavimo
+-                   bibliotekos naršyklėse nepatikimas). */
+                 box-sizing: border-box;
+             }
+             .page-number {
+-                margin-top: 20px;
+-                padding-top: 10px;
+-                border-top: 1px solid #ccc;
++                /* PATAISYTA #4: naudojame position:fixed (ne absolute/flexbox) -
++                   CSS specifikacijoje "paged media" (spausdinimo) kontekste position:fixed
++                   elemento pozicionavimo atskaitos taškas yra PATS PUSLAPIO LANGAS
++                   (page box), o ne dokumento viewport'as kaip ekrane - todėl kiekvieno
++                   atskiro .print-wrapper (vieno per puslapį) numeris patikimai
++                   "prilimpa" prie TO KONKREČIO puslapio apačios, nepriklausomai nuo to,
++                   kiek turinio yra virš jo. Kadangi @page apatinė paraštė padidinta
++                   fiksuotu rezervo dydžiu (žr. $page_number_reserve_mm kintamąjį
++                   aukščiau), numeris atsiduria virš rezervuotos tuščios juostos -
++                   niekada nepersidengia su turiniu ir niekada nepatenka į atskirą
++                   tuščią puslapį. */
++                position: fixed;
++                bottom: 0;
++                left: 0;
++                right: 0;
+                 text-align: center;
+                 font-size: 10pt;
+                 color: #666;
+@@ -387,7 +400,7 @@ function print_document_head($layout_key = 'protocol') {
+                 font-size: ' . (int)($layout['font_size'] ?? 12) . 'pt !important;
+             }
+             @page {
+-                margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)($layout['margin_r'] ?? 20) . 'mm ' . (int)($layout['margin_b'] ?? 20) . 'mm ' . (int)($layout['margin_l'] ?? 20) . 'mm;
++                margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)($layout['margin_r'] ?? 20) . 'mm ' . $effective_margin_b . 'mm ' . (int)($layout['margin_l'] ?? 20) . 'mm;
+             }
+         }
+     </style>';

@@ -378,7 +378,7 @@ function print_document_head($layout_key = 'protocol') {
                 /* PATAISYTA #4: naudojame position:fixed (ne absolute/flexbox) -
                    CSS specifikacijoje "paged media" (spausdinimo) kontekste position:fixed
                    elemento pozicionavimo atskaitos taškas yra PATS PUSLAPIO LANGAS
-                   (page box), o ne dokumento viewport'as kaip ekrane - todėl kiekvieno
+                   (page box), o ne dokumento peržiūros sritis kaip ekrane - todėl kiekvieno
                    atskiro .print-wrapper (vieno per puslapį) numeris patikimai
                    "prilimpa" prie TO KONKREČIO puslapio apačios, nepriklausomai nuo to,
                    kiek turinio yra virš jo. Kadangi @page apatinė paraštė padidinta
