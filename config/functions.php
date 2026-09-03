@@ -487,9 +487,11 @@ function generate_printable_page($title, $institution, $headers, $data, $options
     }
     $html .= '</tbody></table>';
 
+    // PATAISYTA: puslapio numeris dabar rodomas BESĄLYGIŠKAI kiekviename puslapyje,
+    // kai tik žinomi page_num/total_pages (t.y. visada daugiapuslapiuose dokumentuose) -
+    // šablono "show_page_num" nustatymas daugiau NEBETIKRINAMAS.
     $page_num_html = '';
-    if (isset($layout['show_page_num']) && $layout['show_page_num'] == 1
-        && isset($options['page_num']) && isset($options['total_pages'])) {
+    if (isset($options['page_num']) && isset($options['total_pages'])) {
         $page_num_html = '<div class="page-number">Puslapis ' . (int)$options['page_num'] . ' iš ' . (int)$options['total_pages'] . '</div>';
     }
 

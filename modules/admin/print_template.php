@@ -35,7 +35,6 @@ $default_data = [
     'margin_l' => 20,
     'margin_r' => 20,
     'font_size' => 12,
-    'show_page_num' => 1,
     'rows_per_page' => 0
 ];
 
@@ -70,7 +69,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_layout'])) {
                 'margin_l' => (int)($_POST['margin_l'] ?? 20),
                 'margin_r' => (int)($_POST['margin_r'] ?? 20),
                 'font_size' => (int)($_POST['font_size'] ?? 12),
-                'show_page_num' => isset($_POST['show_page_num']) ? 1 : 0,
                 // NAUJA: neprivalomas rankinis eilučių-per-puslapį nustatymas.
                 // 0 arba tuščia reikšmė = automatinis apskaičiavimas pagal paraštes/šriftą
                 // (žr. config/functions.php calculate_rows_per_page()).
@@ -207,11 +205,9 @@ document.addEventListener("DOMContentLoaded", function() {
                             <div class="card bg-light border-0 mb-4 shadow-sm">
                                 <div class="card-body">
                                     <h5 class="fw-bold mb-3 border-bottom pb-2"><i class="fas fa-file-alt"></i> Puslapio numeracija</h5>
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" id="show_page_num" name="show_page_num" value="1" <?php echo (isset($current_layout['show_page_num']) && $current_layout['show_page_num'] == 1) ? 'checked' : ''; ?>>
-                                        <label class="form-check-label fw-bold" for="show_page_num">Rodyti puslapių numerius</label>
+                                    <div class="alert alert-secondary py-2 mb-3">
+                                        <i class="fas fa-info-circle"></i> Puslapių numeracija (pvz. „Puslapis 1 iš 3") dabar rodoma <strong>visada</strong>, kiekviename spausdinamo dokumento puslapyje - atskiro perjungiklio nebereikia.
                                     </div>
-                                    <small class="text-muted d-block mb-3">Įjungus šį nustatymą, kiekvieno spausdinamo lapo apačioje atsiras užrašas „Puslapis 1“.</small>
 
                                     <hr>
                                     <label class="form-label fw-bold mb-1" for="rows_per_page">Eilučių skaičius viename puslapyje</label>
