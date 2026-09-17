@@ -392,25 +392,25 @@ function print_document_head($layout_key = 'protocol') {
             .screen-loader { display: none !important; }
             .print-wrapper {
                 position: relative; left: auto; top: auto; visibility: visible;
-                /* PATAISYTA #7: flexbox GALUTINAI atmestas - dokumentuota naršyklių
-                   spausdinimo variklių problema, kad "page-break-after: always"
-                   nepatikimai veikia, kai puslapio turinio konteineris yra flex
-                   konteineris (display:flex ant .print-wrapper). Realiuose testuose
-                   tai pasireiškė kaip puslapio numerio rodymas TIK kas kelias
-                   duomenų "porcijas", o ne kiekviename fiziniame puslapyje - pats
-                   priverstinis lūžis tarp .olympiad-section/.evaluation-section
-                   blokų tapdavo nepatikimas. Grąžinta prie paprasto blokinio
-                   išdėstymo (be flex) - su šiuo variantu page-break-after veikė
-                   patikimai (patvirtinta ankstesniuose testuose), tik numeris
-                   nebūtinai lygiuojasi lygiai su fizine lapo apačia (žr. .page-number
-                   žemiau - tai sąmoningas kompromisas, žr. calculate_rows_per_page()
-                   dėl rezervuotos vietos skaičiavimo). */
+                display: flex;
+                flex-direction: column;
+                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
                 box-sizing: border-box;
             }
+            /* PATAISYTA #9: paskutinis puslapis (su TIKRA porašte - parašais) turi
+               daugiau realaus turinio nei tarpiniai puslapiai (kurių porastė tuščia),
+               bet calculate_rows_per_page() jau atėmė 35mm iš EILUČIŲ SKAIČIAUS šiam
+               puslapiui (žr. $footer_buffer_mm) - CSS min-height TURI atspindėti tą
+               patį sumažinimą, kitaip flex konteineris persipildo BŪTENT paskutiniame
+               puslapyje (ten, kur turinys "pasikeičia" pridėjus realią porastę), ir
+               margin-top:auto nustoja patikimai veikti. Ši klasė pridedama TIK
+               paskutinio puslapio .print-wrapper elementui (žr. generate_printable_page()).*/
+            .print-wrapper.is-last-page {
+                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm - 35mm);
+            }
             .page-number {
-                margin-top: 15px;
+                margin-top: auto;
                 padding-top: 8px;
-                border-top: 1px solid #ccc;
                 text-align: center;
                 font-size: 10pt;
                 color: #666;
@@ -480,7 +480,13 @@ function generate_printable_page($title, $institution, $headers, $data, $options
 
     $print_id = 'print_' . uniqid();
 
-    $html = '<div id="' . $print_id . '_printable" class="print-wrapper">';
+    // NAUJA: nustatome ANKSTI (prieš atidarant .print-wrapper), ar tai paskutinis
+    // puslapis - reikia CSS klasei "is-last-page" (žr. print_document_head() CSS
+    // dėl min-height skirtumo tarp paprastų ir paskutinio puslapio).
+    $is_last_page = !isset($options['is_last_page']) || $options['is_last_page'] === true;
+    $wrapper_class = 'print-wrapper' . ($is_last_page ? ' is-last-page' : '');
+
+    $html = '<div id="' . $print_id . '_printable" class="' . $wrapper_class . '">';
     $html .= '<div class="print-header">' . $header_html . '</div>';
 
     $html .= '<table class="table print-table w-100">';
@@ -506,8 +512,9 @@ function generate_printable_page($title, $institution, $headers, $data, $options
         $page_num_html = '<div class="page-number">Puslapis ' . (int)$options['page_num'] . ' iš ' . (int)$options['total_pages'] . '</div>';
     }
 
-    $show_footer = !isset($options['is_last_page']) || $options['is_last_page'] === true;
-    $footer_html_output = $show_footer ? $footer_html : '';
+    // NAUJA: naudojame anksčiau (prieš .print-wrapper atidarymą) apskaičiuotą
+    // $is_last_page, kad nebūtų dubliuojama ta pati logika du kartus.
+    $footer_html_output = $is_last_page ? $footer_html : '';
 
     $html .= '<div class="print-footer mt-4 pt-2">' . $footer_html_output . '</div>';
     $html .= $page_num_html;
