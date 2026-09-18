@@ -80,6 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($vardas) || empty($pavarde) || empty($klase)) {
         set_message('Prašome užpildyti privalomus laukus (vardas, pavardė, klasė).', 'error');
+    } elseif (empty($mok_kvali)) {
+        // NAUJA: pirmo mokytojo kvalifikacija privaloma (kaip ir registracijos formoje)
+        set_message('Prašome nurodyti pirmo mokytojo kvalifikaciją.', 'error');
+    } elseif (!empty($mok2) && empty($mok2_kvali)) {
+        // NAUJA: antro mokytojo kvalifikacija privaloma TIK jei įvestas antras mokytojas
+        set_message('Įvedus antrą mokytoją, privaloma nurodyti ir jo kvalifikaciją.', 'error');
     } else {
         // SAUGU: patikra PRIEŠ atnaujinimą, ar pakeistas vardas+pavardė+mokykla
         // nesusidurs su KITU jau egzistuojančiu dalyviu toje pačioje olimpiadoje
@@ -194,7 +200,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                     </div>
                     <div class="col-md-6 form-group mb-3">
                         <label class="fw-bold">Mokytojo kvalifikacija</label>
-                        <select name="1_mok_kvali" class="form-select form-control">
+                        <select name="1_mok_kvali" class="form-select form-control" required>
                             <option value="">-- Pasirinkite --</option>
                             <?php foreach ($qualifications as $q): $kval = $q['kategorija']; ?>
                                 <option value="<?php echo htmlspecialchars($kval); ?>" <?php echo ($participant['1_mok_kvali'] ?? '') === $kval ? 'selected' : ''; ?>><?php echo htmlspecialchars($kval); ?></option>
@@ -205,11 +211,11 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
                 <div class="row">
                     <div class="col-md-6 form-group mb-3">
                         <label class="fw-bold text-muted">Antras mokytojas (neprivaloma)</label>
-                        <input type="text" name="2_mok" class="form-control" value="<?php echo htmlspecialchars($participant['2_mok'] ?? ''); ?>">
+                        <input type="text" name="2_mok" id="mokytojas_2" class="form-control" value="<?php echo htmlspecialchars($participant['2_mok'] ?? ''); ?>">
                     </div>
                     <div class="col-md-6 form-group mb-3">
                         <label class="fw-bold text-muted">Antro mokytojo kvalifikacija</label>
-                        <select name="2_mok_kvali" class="form-select form-control">
+                        <select name="2_mok_kvali" id="kvalifikacija_2" class="form-select form-control">
                             <option value="">-- Pasirinkite --</option>
                             <?php foreach ($qualifications as $q): $kval = $q['kategorija']; ?>
                                 <option value="<?php echo htmlspecialchars($kval); ?>" <?php echo ($participant['2_mok_kvali'] ?? '') === $kval ? 'selected' : ''; ?>><?php echo htmlspecialchars($kval); ?></option>
@@ -242,5 +248,21 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
         </div>
     </div>
 </div>
+
+<script>
+// NAUJA: antro mokytojo kvalifikacija privaloma tik tada, kai įvestas antras mokytojas
+// (ta pati taisyklė kaip registracijos formoje - žr. modules/registration/register.php)
+document.addEventListener('DOMContentLoaded', function () {
+    var mokytojas2 = document.getElementById('mokytojas_2');
+    var kvalifikacija2 = document.getElementById('kvalifikacija_2');
+    if (!mokytojas2 || !kvalifikacija2) return;
+
+    function atnaujinti() {
+        kvalifikacija2.required = mokytojas2.value.trim() !== '';
+    }
+    mokytojas2.addEventListener('input', atnaujinti);
+    atnaujinti();
+});
+</script>
 
 <?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>

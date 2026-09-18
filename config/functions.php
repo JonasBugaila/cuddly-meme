@@ -777,4 +777,246 @@ if (!function_exists('esc')) {
         return htmlspecialchars((string)$string, ENT_QUOTES, 'UTF-8');
     }
 }
+
+/* =========================================================================
+ * LIETUVIŲ KALBOS LINKSNIŲ PAGALBINĖS FUNKCIJOS (diplomams / padėkoms)
+ *
+ * Skirta automatiškai suformuoti diplomo/padėkos tekstą taisyklinga
+ * lietuvių kalba, pvz.:
+ *   "Šiaulių r. Kuršėnų Lauryno Ivinskio gimnazijos 3 gimn. kl. mokinei
+ *    BRIGITAI DAUKŠAITEI ... užėmusiai I vietą"
+ *
+ * SVARBU: tai TAISYKLIŲ (euristikų) pagrindu veikiančios funkcijos, ne
+ * pilnas lietuvių kalbos morfologijos variklis. Jos teisingai apdoroja
+ * absoliučią daugumą įprastų lietuviškų vardų, pavardžių ir mokyklų
+ * pavadinimų, bet retos išimtys (svetimvardžiai, neįprastos pavardės)
+ * gali būti sulinksniuotos netiksliai. Tokiais atvejais šabloną visada
+ * galima papildyti ranka arba naudoti neliksniuotus kintamuosius.
+ * ========================================================================= */
+
+/**
+ * Pakeičia žodžio galūnę, išsaugant originalo raidžių registrą
+ * (jei galūnė buvo DIDŽIOSIOMIS, nauja galūnė taip pat bus didžiosiomis).
+ */
+function lt_replace_suffix($word, $from, $to) {
+    $from_len = mb_strlen($from, 'UTF-8');
+    $word_len = mb_strlen($word, 'UTF-8');
+    if ($word_len <= $from_len) {
+        return $word;
+    }
+
+    $tail = mb_substr($word, -$from_len, null, 'UTF-8');
+    $stem = mb_substr($word, 0, $word_len - $from_len, 'UTF-8');
+
+    // Jei originali galūnė buvo didžiosiomis raidėmis - naują taip pat didiname
+    if ($tail === mb_strtoupper($tail, 'UTF-8') && $tail !== mb_strtolower($tail, 'UTF-8')) {
+        $to = mb_strtoupper($to, 'UTF-8');
+    }
+
+    return $stem . $to;
+}
+
+/**
+ * Ar žodis baigiasi nurodyta galūne (nepaisant raidžių registro)?
+ */
+function lt_ends_with($word, $suffix) {
+    $suffix_len = mb_strlen($suffix, 'UTF-8');
+    if (mb_strlen($word, 'UTF-8') <= $suffix_len) {
+        return false;
+    }
+    $tail = mb_strtolower(mb_substr($word, -$suffix_len, null, 'UTF-8'), 'UTF-8');
+    return $tail === mb_strtolower($suffix, 'UTF-8');
+}
+
+/**
+ * Atspėja lytį pagal vardą ir pavardę.
+ * Pavardė yra patikimesnis požymis nei vardas (moteriškos pavardės turi
+ * aiškias galūnes: -ienė, -aitė, -ytė, -utė, -ė).
+ *
+ * Grąžina 'f' (moteris) arba 'm' (vyras).
+ */
+function lt_guess_gender($vardas, $pavarde = '') {
+    $pavarde = trim((string)$pavarde);
+
+    if ($pavarde !== '') {
+        // Moteriškos pavardės
+        foreach (['ienė', 'aitė', 'ytė', 'utė', 'ūtė', 'iūtė'] as $suf) {
+            if (lt_ends_with($pavarde, $suf)) return 'f';
+        }
+        // Vyriškos pavardės (įskaitant retas, besibaigiančias -a: Bugaila, Sruoga)
+        foreach (['as', 'is', 'us', 'ys', 'a'] as $suf) {
+            if (lt_ends_with($pavarde, $suf)) return 'm';
+        }
+        // Bendra moteriška galūnė -ė (jei nepataikė nė viena aukščiau)
+        if (lt_ends_with($pavarde, 'ė')) return 'f';
+    }
+
+    // Atsarginis variantas - pagal vardą
+    $vardas = trim((string)$vardas);
+    if ($vardas !== '') {
+        foreach (['as', 'is', 'us', 'ys'] as $suf) {
+            if (lt_ends_with($vardas, $suf)) return 'm';
+        }
+        foreach (['a', 'ė'] as $suf) {
+            if (lt_ends_with($vardas, $suf)) return 'f';
+        }
+    }
+
+    return 'm';
+}
+
+/**
+ * Vieno žodžio (vardo arba pavardės) naudininkas - "kam?"
+ * Jonas -> Jonui, Brigita -> Brigitai, Daukšaitė -> Daukšaitei,
+ * Petraitis -> Petraičiui, Julius -> Juliui, Vaitkus -> Vaitkui.
+ */
+function lt_word_to_dative($word) {
+    $word = trim((string)$word);
+    if ($word === '') return '';
+
+    // Moteriškos galūnės
+    if (lt_ends_with($word, 'ienė')) return lt_replace_suffix($word, 'ienė', 'ienei');
+    if (lt_ends_with($word, 'aitė')) return lt_replace_suffix($word, 'aitė', 'aitei');
+    if (lt_ends_with($word, 'ytė'))  return lt_replace_suffix($word, 'ytė', 'ytei');
+    if (lt_ends_with($word, 'iūtė')) return lt_replace_suffix($word, 'iūtė', 'iūtei');
+    if (lt_ends_with($word, 'utė'))  return lt_replace_suffix($word, 'utė', 'utei');
+    if (lt_ends_with($word, 'ūtė'))  return lt_replace_suffix($word, 'ūtė', 'ūtei');
+
+    // Vyriškos galūnės su minkštinimu (t -> č, d -> dž prieš "iui")
+    if (lt_ends_with($word, 'tis')) return lt_replace_suffix($word, 'tis', 'čiui');
+    if (lt_ends_with($word, 'dis')) return lt_replace_suffix($word, 'dis', 'džiui');
+    if (lt_ends_with($word, 'tys')) return lt_replace_suffix($word, 'tys', 'čiui');
+    if (lt_ends_with($word, 'dys')) return lt_replace_suffix($word, 'dys', 'džiui');
+
+    // Kitos vyriškos galūnės
+    if (lt_ends_with($word, 'ius')) return lt_replace_suffix($word, 'ius', 'iui');
+    if (lt_ends_with($word, 'ys'))  return lt_replace_suffix($word, 'ys', 'iui');
+    if (lt_ends_with($word, 'is'))  return lt_replace_suffix($word, 'is', 'iui');
+    if (lt_ends_with($word, 'as'))  return lt_replace_suffix($word, 'as', 'ui');
+    if (lt_ends_with($word, 'us'))  return lt_replace_suffix($word, 'us', 'ui');
+
+    // Bendros galūnės (moteriški vardai -a/-ė, vyriškos pavardės -a)
+    if (lt_ends_with($word, 'ė')) return lt_replace_suffix($word, 'ė', 'ei');
+    if (lt_ends_with($word, 'a')) return lt_replace_suffix($word, 'a', 'ai');
+
+    return $word; // nepavyko atpažinti - paliekame kaip yra
+}
+
+/**
+ * Vardas ir pavardė naudininku: "Brigita Daukšaitė" -> "Brigitai Daukšaitei"
+ */
+function lt_name_to_dative($vardas, $pavarde = '') {
+    $parts = [];
+    foreach ([$vardas, $pavarde] as $w) {
+        $w = trim((string)$w);
+        if ($w !== '') {
+            $parts[] = lt_word_to_dative($w);
+        }
+    }
+    return implode(' ', $parts);
+}
+
+/**
+ * Vieno žodžio kilmininkas - "ko?"
+ * gimnazija -> gimnazijos, mokykla -> mokyklos, pagrindinė -> pagrindinės,
+ * lopšelis -> lopšelio, centras -> centro.
+ */
+function lt_word_to_genitive($word) {
+    $word = trim((string)$word);
+    if ($word === '') return '';
+
+    if (lt_ends_with($word, 'ius')) return lt_replace_suffix($word, 'ius', 'iaus');
+    if (lt_ends_with($word, 'ys'))  return lt_replace_suffix($word, 'ys', 'io');
+    if (lt_ends_with($word, 'is'))  return lt_replace_suffix($word, 'is', 'io');
+    if (lt_ends_with($word, 'as'))  return lt_replace_suffix($word, 'as', 'o');
+    if (lt_ends_with($word, 'us'))  return lt_replace_suffix($word, 'us', 'aus');
+    if (lt_ends_with($word, 'ė'))   return lt_replace_suffix($word, 'ė', 'ės');
+    if (lt_ends_with($word, 'a'))   return lt_replace_suffix($word, 'a', 'os');
+
+    return $word;
+}
+
+/**
+ * Mokyklos pavadinimas kilmininku:
+ * "Šiaulių r. Kuršėnų Lauryno Ivinskio gimnazija" -> "...gimnazijos"
+ * "Šiaulių r. Bubių pagrindinė mokykla" -> "...pagrindinės mokyklos"
+ *
+ * Linksniuojamas paskutinis žodis; jei prieš jį einantis žodis yra
+ * būdvardinis (baigiasi -ė, -inė, -oji), linksniuojamas ir jis
+ * (nes lietuvių kalboje būdvardis derinamas su daiktavardžiu).
+ */
+function lt_school_to_genitive($school) {
+    $school = trim((string)$school);
+    if ($school === '') return '';
+
+    $parts = preg_split('/\s+/u', $school);
+    $last = count($parts) - 1;
+    if ($last < 0) return $school;
+
+    $parts[$last] = lt_word_to_genitive($parts[$last]);
+
+    if ($last > 0) {
+        $prev = $parts[$last - 1];
+        if (preg_match('/(inė|oji|ioji|ė)$/u', $prev)) {
+            $parts[$last - 1] = lt_word_to_genitive($prev);
+        }
+    }
+
+    return implode(' ', $parts);
+}
+
+/**
+ * Vieno žodžio vietininkas - "kur?"
+ * etapas -> etape, olimpiada -> olimpiadoje, konkursas -> konkurse.
+ */
+function lt_word_to_locative($word) {
+    $word = trim((string)$word);
+    if ($word === '') return '';
+
+    if (lt_ends_with($word, 'ius')) return lt_replace_suffix($word, 'ius', 'iuje');
+    if (lt_ends_with($word, 'ys'))  return lt_replace_suffix($word, 'ys', 'yje');
+    if (lt_ends_with($word, 'is'))  return lt_replace_suffix($word, 'is', 'yje');
+    if (lt_ends_with($word, 'as'))  return lt_replace_suffix($word, 'as', 'e');
+    if (lt_ends_with($word, 'us'))  return lt_replace_suffix($word, 'us', 'uje');
+    if (lt_ends_with($word, 'ė'))   return lt_replace_suffix($word, 'ė', 'ėje');
+    if (lt_ends_with($word, 'a'))   return lt_replace_suffix($word, 'a', 'oje');
+
+    return $word;
+}
+
+/**
+ * Olimpiados/konkurso pavadinimas vietininku (linksniuojamas tik paskutinis žodis):
+ * "... chemijos olimpiados Savivaldybės etapas" -> "... Savivaldybės etape"
+ * "Lietuvos mokinių anglų kalbos olimpiada" -> "... olimpiadoje"
+ */
+function lt_event_to_locative($event) {
+    $event = trim((string)$event);
+    if ($event === '') return '';
+
+    $parts = preg_split('/\s+/u', $event);
+    $last = count($parts) - 1;
+    if ($last < 0) return $event;
+
+    $parts[$last] = lt_word_to_locative($parts[$last]);
+    return implode(' ', $parts);
+}
+
+/**
+ * Žodis "mokinys" reikiamu linksniu ir lytimi.
+ * $case: 'v' (vardininkas - kas?) arba 'n' (naudininkas - kam?)
+ */
+function lt_student_word($gender, $case = 'n') {
+    if ($case === 'v') {
+        return ($gender === 'f') ? 'mokinė' : 'mokinys';
+    }
+    return ($gender === 'f') ? 'mokinei' : 'mokiniui';
+}
+
+/**
+ * Dalyvis "užėmusiam" / "užėmusiai" pagal lytį.
+ */
+function lt_participle_uzemus($gender) {
+    return ($gender === 'f') ? 'užėmusiai' : 'užėmusiam';
+}
+
 ?>

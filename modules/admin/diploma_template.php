@@ -111,10 +111,19 @@ document.addEventListener("DOMContentLoaded", function() {
                             { type: 'menuitem', text: 'Diplomo numeris', onAction: function () { editor.insertContent(' <strong>{DIP_NR}</strong> '); } },
                             { type: 'menuitem', text: 'Sistemos Logotipas', onAction: function () { editor.insertContent(' <p>{LOGO}</p> '); } },
                             { type: 'menuitem', text: 'Užimta vieta', onAction: function () { editor.insertContent(' <strong>{VIETA}</strong> '); } },
-                            { type: 'menuitem', text: 'Mokinio Vardas Pavardė', onAction: function () { editor.insertContent(' <strong>{VARDAS_PAVARDE}</strong> '); } },
-                            { type: 'menuitem', text: 'Mokykla', onAction: function () { editor.insertContent(' {MOKYKLA} '); } },
+                            { type: 'menuitem', text: 'Data', onAction: function () { editor.insertContent(' {DATA} '); } },
+                            { type: 'separator' },
+                            { type: 'menuitem', text: 'Vardas Pavardė (kas? - Brigita Daukšaitė)', onAction: function () { editor.insertContent(' <strong>{VARDAS_PAVARDE}</strong> '); } },
+                            { type: 'menuitem', text: 'Vardas Pavardė (kam? - Brigitai Daukšaitei)', onAction: function () { editor.insertContent(' <strong>{VARDAS_PAVARDE_KAM}</strong> '); } },
+                            { type: 'menuitem', text: 'Mokykla (kas? - ... gimnazija)', onAction: function () { editor.insertContent(' {MOKYKLA} '); } },
+                            { type: 'menuitem', text: 'Mokykla (ko? - ... gimnazijos)', onAction: function () { editor.insertContent(' {MOKYKLOS} '); } },
+                            { type: 'menuitem', text: 'Klasė', onAction: function () { editor.insertContent(' {KLASE} '); } },
+                            { type: 'menuitem', text: 'mokiniui / mokinei (pagal lytį)', onAction: function () { editor.insertContent(' {MOKINIUI} '); } },
+                            { type: 'menuitem', text: 'mokinys / mokinė (pagal lytį)', onAction: function () { editor.insertContent(' {MOKINYS} '); } },
+                            { type: 'menuitem', text: 'užėmusiam / užėmusiai (pagal lytį)', onAction: function () { editor.insertContent(' {UZEMUSIAM} '); } },
+                            { type: 'separator' },
                             { type: 'menuitem', text: 'Olimpiados pavadinimas', onAction: function () { editor.insertContent(' „{OLIMPIADA}“ '); } },
-                            { type: 'menuitem', text: 'Data', onAction: function () { editor.insertContent(' {DATA} '); } }
+                            { type: 'menuitem', text: 'Ruošęs mokytojas', onAction: function () { editor.insertContent(' {MOKYTOJAS} '); } }
                         ];
                         callback(items);
                     }

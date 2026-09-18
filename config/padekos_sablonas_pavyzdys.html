@@ -1,0 +1,93 @@
+<!--
+  ŠIAULIŲ R. ŠVIETIMO PAGALBOS TARNYBA — PADĖKOS ŠABLONAS
+  ========================================================
+  Kaip naudoti:
+    1. Administravimas -> Diplomų šablonai
+    2. Įrankių juostoje paspauskite "<>" (Source code / Kodas)
+    3. Ištrinkite seną turinį ir įklijuokite VISĄ šį failą
+    4. Išsaugokite
+
+  Spalvos paimtos iš įstaigos logotipo:
+    #58595B  tamsiai pilka (pagrindinis tekstas, logotipo linijos)
+    #006B3F  tamsiai žalia (logotipo kvadratas)
+    #FFD500  geltona (logotipo trikampis)
+    #E30613  raudona (logotipo taškas)
+    #8FBCA8  švelni žalsva (foninių trikampių atspalvis)
+-->
+
+<div style="font-family: '{FONT_NAME}'; text-align: center; padding: 45px 70px; color: #58595B;">
+
+  <!-- Viršutinė spalvota juostelė (firminės logotipo spalvos) -->
+  <table cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 8px;">
+    <tr>
+      <td style="width: 25%; height: 6px; background-color: #006B3F;">&nbsp;</td>
+      <td style="width: 25%; height: 6px; background-color: #8FBCA8;">&nbsp;</td>
+      <td style="width: 25%; height: 6px; background-color: #FFD500;">&nbsp;</td>
+      <td style="width: 25%; height: 6px; background-color: #E30613;">&nbsp;</td>
+    </tr>
+  </table>
+
+  <p style="text-align: right; font-size: 11px; color: #9A9A9A; margin: 0 0 10px 0;">{DIP_NR}</p>
+
+  <!-- Įstaigos pavadinimas -->
+  <p style="font-size: 15px; letter-spacing: 2px; color: #58595B; margin: 0 0 4px 0;">
+    ŠIAULIŲ R. ŠVIETIMO
+  </p>
+  <p style="font-size: 15px; letter-spacing: 2px; color: #58595B; margin: 0 0 30px 0;">
+    PAGALBOS TARNYBA
+  </p>
+
+  <!-- Antraštė -->
+  <h1 style="font-size: 52px; font-weight: normal; letter-spacing: 6px; color: #58595B; margin: 0 0 6px 0;">
+    PADĖKA
+  </h1>
+
+  <!-- Trumpa žalia linija po antrašte -->
+  <table cellpadding="0" cellspacing="0" style="width: 120px; margin: 0 auto 32px auto;">
+    <tr><td style="height: 3px; background-color: #006B3F;">&nbsp;</td></tr>
+  </table>
+
+  <!-- Mokyklos pavadinimas KILMININKU + klasė + mokiniui/mokinei pagal lytį -->
+  <p style="font-size: 17px; line-height: 1.5; color: #58595B; margin: 0 0 22px 0;">
+    {MOKYKLOS}<br>
+    {KLASE} kl. {MOKINIUI}
+  </p>
+
+  <!-- Vardas Pavardė NAUDININKU (kam?) -->
+  <p style="font-size: 34px; font-weight: bold; color: #006B3F; margin: 0 0 26px 0;">
+    {VARDAS_PAVARDE_KAM}
+  </p>
+
+  <!-- Už ką dėkojama (tekstas sudėliotas kaip tikrame Jūsų diplome) -->
+  <p style="font-size: 18px; line-height: 1.6; color: #58595B; margin: 0 0 8px 0;">
+    {OLIMPIADOJE}
+  </p>
+  <p style="font-size: 18px; line-height: 1.6; color: #58595B; margin: 0 0 40px 0;">
+    {UZEMUSIAM} <strong style="font-size: 22px;">{VIETA_KA}</strong>
+  </p>
+
+  <!-- Parašo dalis -->
+  <table cellpadding="0" cellspacing="0" style="width: 100%; margin-top: 30px;">
+    <tr>
+      <td style="width: 50%; text-align: left; font-size: 15px; color: #58595B;">
+        <strong>Direktorė</strong>
+      </td>
+      <td style="width: 50%; text-align: right; font-size: 15px; color: #58595B;">
+        ________________________
+      </td>
+    </tr>
+  </table>
+
+  <p style="font-size: 13px; color: #9A9A9A; margin-top: 34px;">{DATA}</p>
+
+  <!-- Apatinė spalvota juostelė -->
+  <table cellpadding="0" cellspacing="0" style="width: 100%; margin-top: 12px;">
+    <tr>
+      <td style="width: 25%; height: 6px; background-color: #E30613;">&nbsp;</td>
+      <td style="width: 25%; height: 6px; background-color: #FFD500;">&nbsp;</td>
+      <td style="width: 25%; height: 6px; background-color: #8FBCA8;">&nbsp;</td>
+      <td style="width: 25%; height: 6px; background-color: #006B3F;">&nbsp;</td>
+    </tr>
+  </table>
+
+</div>

@@ -41,6 +41,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])
     
     $vart_id = $_SESSION['user_id'] ?? 'SISTEMA'; // Naudojame user_id (pagal jūsų login.php nustatymą)
 
+    // NAUJA: kvalifikacijų privalomumo patikra serveryje (JS patikra lengvai
+    // apeinama, todėl ta pati taisyklė privalo galioti ir serverio pusėje):
+    //  - pirmo mokytojo kvalifikacija PRIVALOMA visada;
+    //  - antro mokytojo kvalifikacija privaloma TIK jei įvestas antras mokytojas.
+    $kvali_klaida = '';
+    if (empty($mok_kvali)) {
+        $kvali_klaida = 'Prašome nurodyti pirmo mokytojo kvalifikaciją.';
+    } elseif (!empty($mok2) && empty($mok2_kvali)) {
+        $kvali_klaida = 'Įvedus antrą mokytoją, privaloma nurodyti ir jo kvalifikaciją.';
+    }
+
+    if ($kvali_klaida !== '') {
+        set_message($kvali_klaida, 'error');
+        redirect(current_url());
+        exit;
+    }
+
     if (!empty($konkurso_pav) && !empty($var_mokykla) && !empty($vardas) && !empty($pavarde)) {
         $conn = db_connect();
         
@@ -240,9 +257,9 @@ require_once __DIR__ . '/../../includes/header.php';
                     </div>
                     
                     <div class="col-md-6 form-group mb-3">
-                        <label class="fw-bold">Mokytojo kvalifikacija</label>
-                        <select name="1_mok_kvali" id="kvalifikacija" class="form-select form-control">
-                            <option value="">-- Pasirinkite (Neprivaloma) --</option>
+                        <label class="fw-bold">Mokytojo kvalifikacija <span class="text-danger">*</span></label>
+                        <select name="1_mok_kvali" id="kvalifikacija" class="form-select form-control" required>
+                            <option value="">-- Pasirinkite --</option>
                             <?php foreach ($qualifications as $q): ?>
                                 <option value="<?php echo htmlspecialchars($q['kategorija']); ?>"><?php echo htmlspecialchars($q['kategorija']); ?></option>
                             <?php endforeach; ?>
@@ -257,13 +274,14 @@ require_once __DIR__ . '/../../includes/header.php';
                     </div>
                     
                     <div class="col-md-6 form-group mb-3">
-                        <label class="fw-bold text-muted">Antro mokytojo kvalifikacija</label>
+                        <label class="fw-bold text-muted">Antro mokytojo kvalifikacija <span class="text-danger d-none" id="kval2_privaloma">*</span></label>
                         <select name="2_mok_kvali" id="kvalifikacija_2" class="form-select form-control">
-                            <option value="">-- Pasirinkite (Neprivaloma) --</option>
+                            <option value="">-- Pasirinkite --</option>
                             <?php foreach ($qualifications as $q): ?>
                                 <option value="<?php echo htmlspecialchars($q['kategorija']); ?>"><?php echo htmlspecialchars($q['kategorija']); ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <small class="text-muted d-block mt-1">Privaloma tik tuo atveju, jei įvestas antras mokytojas.</small>
                     </div>
                 </div>
 
@@ -307,7 +325,28 @@ document.addEventListener('DOMContentLoaded', function() {
     const kvalifikacijaInput = document.getElementById('kvalifikacija');
     const rezultataiDiv = document.getElementById('paieskos-rezultatai');
     const konkursoSelect = document.getElementById('konkurso_pav');
-    
+
+    // NAUJA: antro mokytojo kvalifikacija tampa PRIVALOMA tik tada, kai
+    // įvedamas antras mokytojas. Jei antro mokytojo laukas tuščias -
+    // kvalifikacija lieka neprivaloma (ne visada yra antras mokytojas).
+    const mokytojas2Input = document.getElementById('mokytojas_2');
+    const kvalifikacija2Select = document.getElementById('kvalifikacija_2');
+    const kval2Zvaigzdute = document.getElementById('kval2_privaloma');
+
+    function atnaujintiAntroMokytojoKvalifikacija() {
+        if (!mokytojas2Input || !kvalifikacija2Select) return;
+        const yraAntrasMokytojas = mokytojas2Input.value.trim() !== '';
+        kvalifikacija2Select.required = yraAntrasMokytojas;
+        if (kval2Zvaigzdute) {
+            kval2Zvaigzdute.classList.toggle('d-none', !yraAntrasMokytojas);
+        }
+    }
+
+    if (mokytojas2Input) {
+        mokytojas2Input.addEventListener('input', atnaujintiAntroMokytojoKvalifikacija);
+        atnaujintiAntroMokytojoKvalifikacija(); // pradinė būsena (pvz. po klaidos perkrovimo)
+    }
+
     let timeout = null;
 
     // NAUJA: pasikeitus olimpiadai, paslepiame senus paieškos rezultatus,
