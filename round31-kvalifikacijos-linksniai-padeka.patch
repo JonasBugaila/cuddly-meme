@@ -1,0 +1,665 @@
+diff --git a/config/functions.php b/config/functions.php
+index a5526a5..002cc9f 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -769,4 +769,246 @@ if (!function_exists('esc')) {
+         return htmlspecialchars((string)$string, ENT_QUOTES, 'UTF-8');
+     }
+ }
+-?>
+\ No newline at end of file
++
++/* =========================================================================
++ * LIETUVIŲ KALBOS LINKSNIŲ PAGALBINĖS FUNKCIJOS (diplomams / padėkoms)
++ *
++ * Skirta automatiškai suformuoti diplomo/padėkos tekstą taisyklinga
++ * lietuvių kalba, pvz.:
++ *   "Šiaulių r. Kuršėnų Lauryno Ivinskio gimnazijos 3 gimn. kl. mokinei
++ *    BRIGITAI DAUKŠAITEI ... užėmusiai I vietą"
++ *
++ * SVARBU: tai TAISYKLIŲ (euristikų) pagrindu veikiančios funkcijos, ne
++ * pilnas lietuvių kalbos morfologijos variklis. Jos teisingai apdoroja
++ * absoliučią daugumą įprastų lietuviškų vardų, pavardžių ir mokyklų
++ * pavadinimų, bet retos išimtys (svetimvardžiai, neįprastos pavardės)
++ * gali būti sulinksniuotos netiksliai. Tokiais atvejais šabloną visada
++ * galima papildyti ranka arba naudoti neliksniuotus kintamuosius.
++ * ========================================================================= */
++
++/**
++ * Pakeičia žodžio galūnę, išsaugant originalo raidžių registrą
++ * (jei galūnė buvo DIDŽIOSIOMIS, nauja galūnė taip pat bus didžiosiomis).
++ */
++function lt_replace_suffix($word, $from, $to) {
++    $from_len = mb_strlen($from, 'UTF-8');
++    $word_len = mb_strlen($word, 'UTF-8');
++    if ($word_len <= $from_len) {
++        return $word;
++    }
++
++    $tail = mb_substr($word, -$from_len, null, 'UTF-8');
++    $stem = mb_substr($word, 0, $word_len - $from_len, 'UTF-8');
++
++    // Jei originali galūnė buvo didžiosiomis raidėmis - naują taip pat didiname
++    if ($tail === mb_strtoupper($tail, 'UTF-8') && $tail !== mb_strtolower($tail, 'UTF-8')) {
++        $to = mb_strtoupper($to, 'UTF-8');
++    }
++
++    return $stem . $to;
++}
++
++/**
++ * Ar žodis baigiasi nurodyta galūne (nepaisant raidžių registro)?
++ */
++function lt_ends_with($word, $suffix) {
++    $suffix_len = mb_strlen($suffix, 'UTF-8');
++    if (mb_strlen($word, 'UTF-8') <= $suffix_len) {
++        return false;
++    }
++    $tail = mb_strtolower(mb_substr($word, -$suffix_len, null, 'UTF-8'), 'UTF-8');
++    return $tail === mb_strtolower($suffix, 'UTF-8');
++}
++
++/**
++ * Atspėja lytį pagal vardą ir pavardę.
++ * Pavardė yra patikimesnis požymis nei vardas (moteriškos pavardės turi
++ * aiškias galūnes: -ienė, -aitė, -ytė, -utė, -ė).
++ *
++ * Grąžina 'f' (moteris) arba 'm' (vyras).
++ */
++function lt_guess_gender($vardas, $pavarde = '') {
++    $pavarde = trim((string)$pavarde);
++
++    if ($pavarde !== '') {
++        // Moteriškos pavardės
++        foreach (['ienė', 'aitė', 'ytė', 'utė', 'ūtė', 'iūtė'] as $suf) {
++            if (lt_ends_with($pavarde, $suf)) return 'f';
++        }
++        // Vyriškos pavardės (įskaitant retas, besibaigiančias -a: Bugaila, Sruoga)
++        foreach (['as', 'is', 'us', 'ys', 'a'] as $suf) {
++            if (lt_ends_with($pavarde, $suf)) return 'm';
++        }
++        // Bendra moteriška galūnė -ė (jei nepataikė nė viena aukščiau)
++        if (lt_ends_with($pavarde, 'ė')) return 'f';
++    }
++
++    // Atsarginis variantas - pagal vardą
++    $vardas = trim((string)$vardas);
++    if ($vardas !== '') {
++        foreach (['as', 'is', 'us', 'ys'] as $suf) {
++            if (lt_ends_with($vardas, $suf)) return 'm';
++        }
++        foreach (['a', 'ė'] as $suf) {
++            if (lt_ends_with($vardas, $suf)) return 'f';
++        }
++    }
++
++    return 'm';
++}
++
++/**
++ * Vieno žodžio (vardo arba pavardės) naudininkas - "kam?"
++ * Jonas -> Jonui, Brigita -> Brigitai, Daukšaitė -> Daukšaitei,
++ * Petraitis -> Petraičiui, Julius -> Juliui, Vaitkus -> Vaitkui.
++ */
++function lt_word_to_dative($word) {
++    $word = trim((string)$word);
++    if ($word === '') return '';
++
++    // Moteriškos galūnės
++    if (lt_ends_with($word, 'ienė')) return lt_replace_suffix($word, 'ienė', 'ienei');
++    if (lt_ends_with($word, 'aitė')) return lt_replace_suffix($word, 'aitė', 'aitei');
++    if (lt_ends_with($word, 'ytė'))  return lt_replace_suffix($word, 'ytė', 'ytei');
++    if (lt_ends_with($word, 'iūtė')) return lt_replace_suffix($word, 'iūtė', 'iūtei');
++    if (lt_ends_with($word, 'utė'))  return lt_replace_suffix($word, 'utė', 'utei');
++    if (lt_ends_with($word, 'ūtė'))  return lt_replace_suffix($word, 'ūtė', 'ūtei');
++
++    // Vyriškos galūnės su minkštinimu (t -> č, d -> dž prieš "iui")
++    if (lt_ends_with($word, 'tis')) return lt_replace_suffix($word, 'tis', 'čiui');
++    if (lt_ends_with($word, 'dis')) return lt_replace_suffix($word, 'dis', 'džiui');
++    if (lt_ends_with($word, 'tys')) return lt_replace_suffix($word, 'tys', 'čiui');
++    if (lt_ends_with($word, 'dys')) return lt_replace_suffix($word, 'dys', 'džiui');
++
++    // Kitos vyriškos galūnės
++    if (lt_ends_with($word, 'ius')) return lt_replace_suffix($word, 'ius', 'iui');
++    if (lt_ends_with($word, 'ys'))  return lt_replace_suffix($word, 'ys', 'iui');
++    if (lt_ends_with($word, 'is'))  return lt_replace_suffix($word, 'is', 'iui');
++    if (lt_ends_with($word, 'as'))  return lt_replace_suffix($word, 'as', 'ui');
++    if (lt_ends_with($word, 'us'))  return lt_replace_suffix($word, 'us', 'ui');
++
++    // Bendros galūnės (moteriški vardai -a/-ė, vyriškos pavardės -a)
++    if (lt_ends_with($word, 'ė')) return lt_replace_suffix($word, 'ė', 'ei');
++    if (lt_ends_with($word, 'a')) return lt_replace_suffix($word, 'a', 'ai');
++
++    return $word; // nepavyko atpažinti - paliekame kaip yra
++}
++
++/**
++ * Vardas ir pavardė naudininku: "Brigita Daukšaitė" -> "Brigitai Daukšaitei"
++ */
++function lt_name_to_dative($vardas, $pavarde = '') {
++    $parts = [];
++    foreach ([$vardas, $pavarde] as $w) {
++        $w = trim((string)$w);
++        if ($w !== '') {
++            $parts[] = lt_word_to_dative($w);
++        }
++    }
++    return implode(' ', $parts);
++}
++
++/**
++ * Vieno žodžio kilmininkas - "ko?"
++ * gimnazija -> gimnazijos, mokykla -> mokyklos, pagrindinė -> pagrindinės,
++ * lopšelis -> lopšelio, centras -> centro.
++ */
++function lt_word_to_genitive($word) {
++    $word = trim((string)$word);
++    if ($word === '') return '';
++
++    if (lt_ends_with($word, 'ius')) return lt_replace_suffix($word, 'ius', 'iaus');
++    if (lt_ends_with($word, 'ys'))  return lt_replace_suffix($word, 'ys', 'io');
++    if (lt_ends_with($word, 'is'))  return lt_replace_suffix($word, 'is', 'io');
++    if (lt_ends_with($word, 'as'))  return lt_replace_suffix($word, 'as', 'o');
++    if (lt_ends_with($word, 'us'))  return lt_replace_suffix($word, 'us', 'aus');
++    if (lt_ends_with($word, 'ė'))   return lt_replace_suffix($word, 'ė', 'ės');
++    if (lt_ends_with($word, 'a'))   return lt_replace_suffix($word, 'a', 'os');
++
++    return $word;
++}
++
++/**
++ * Mokyklos pavadinimas kilmininku:
++ * "Šiaulių r. Kuršėnų Lauryno Ivinskio gimnazija" -> "...gimnazijos"
++ * "Šiaulių r. Bubių pagrindinė mokykla" -> "...pagrindinės mokyklos"
++ *
++ * Linksniuojamas paskutinis žodis; jei prieš jį einantis žodis yra
++ * būdvardinis (baigiasi -ė, -inė, -oji), linksniuojamas ir jis
++ * (nes lietuvių kalboje būdvardis derinamas su daiktavardžiu).
++ */
++function lt_school_to_genitive($school) {
++    $school = trim((string)$school);
++    if ($school === '') return '';
++
++    $parts = preg_split('/\s+/u', $school);
++    $last = count($parts) - 1;
++    if ($last < 0) return $school;
++
++    $parts[$last] = lt_word_to_genitive($parts[$last]);
++
++    if ($last > 0) {
++        $prev = $parts[$last - 1];
++        if (preg_match('/(inė|oji|ioji|ė)$/u', $prev)) {
++            $parts[$last - 1] = lt_word_to_genitive($prev);
++        }
++    }
++
++    return implode(' ', $parts);
++}
++
++/**
++ * Vieno žodžio vietininkas - "kur?"
++ * etapas -> etape, olimpiada -> olimpiadoje, konkursas -> konkurse.
++ */
++function lt_word_to_locative($word) {
++    $word = trim((string)$word);
++    if ($word === '') return '';
++
++    if (lt_ends_with($word, 'ius')) return lt_replace_suffix($word, 'ius', 'iuje');
++    if (lt_ends_with($word, 'ys'))  return lt_replace_suffix($word, 'ys', 'yje');
++    if (lt_ends_with($word, 'is'))  return lt_replace_suffix($word, 'is', 'yje');
++    if (lt_ends_with($word, 'as'))  return lt_replace_suffix($word, 'as', 'e');
++    if (lt_ends_with($word, 'us'))  return lt_replace_suffix($word, 'us', 'uje');
++    if (lt_ends_with($word, 'ė'))   return lt_replace_suffix($word, 'ė', 'ėje');
++    if (lt_ends_with($word, 'a'))   return lt_replace_suffix($word, 'a', 'oje');
++
++    return $word;
++}
++
++/**
++ * Olimpiados/konkurso pavadinimas vietininku (linksniuojamas tik paskutinis žodis):
++ * "... chemijos olimpiados Savivaldybės etapas" -> "... Savivaldybės etape"
++ * "Lietuvos mokinių anglų kalbos olimpiada" -> "... olimpiadoje"
++ */
++function lt_event_to_locative($event) {
++    $event = trim((string)$event);
++    if ($event === '') return '';
++
++    $parts = preg_split('/\s+/u', $event);
++    $last = count($parts) - 1;
++    if ($last < 0) return $event;
++
++    $parts[$last] = lt_word_to_locative($parts[$last]);
++    return implode(' ', $parts);
++}
++
++/**
++ * Žodis "mokinys" reikiamu linksniu ir lytimi.
++ * $case: 'v' (vardininkas - kas?) arba 'n' (naudininkas - kam?)
++ */
++function lt_student_word($gender, $case = 'n') {
++    if ($case === 'v') {
++        return ($gender === 'f') ? 'mokinė' : 'mokinys';
++    }
++    return ($gender === 'f') ? 'mokinei' : 'mokiniui';
++}
++
++/**
++ * Dalyvis "užėmusiam" / "užėmusiai" pagal lytį.
++ */
++function lt_participle_uzemus($gender) {
++    return ($gender === 'f') ? 'užėmusiai' : 'užėmusiam';
++}
++
++?>
+diff --git a/config/padekos_sablonas_pavyzdys.html b/config/padekos_sablonas_pavyzdys.html
+new file mode 100644
+index 0000000..94fc3b7
+--- /dev/null
++++ b/config/padekos_sablonas_pavyzdys.html
+@@ -0,0 +1,93 @@
++<!--
++  ŠIAULIŲ R. ŠVIETIMO PAGALBOS TARNYBA — PADĖKOS ŠABLONAS
++  ========================================================
++  Kaip naudoti:
++    1. Administravimas -> Diplomų šablonai
++    2. Įrankių juostoje paspauskite "<>" (Source code / Kodas)
++    3. Ištrinkite seną turinį ir įklijuokite VISĄ šį failą
++    4. Išsaugokite
++
++  Spalvos paimtos iš įstaigos logotipo:
++    #58595B  tamsiai pilka (pagrindinis tekstas, logotipo linijos)
++    #006B3F  tamsiai žalia (logotipo kvadratas)
++    #FFD500  geltona (logotipo trikampis)
++    #E30613  raudona (logotipo taškas)
++    #8FBCA8  švelni žalsva (foninių trikampių atspalvis)
++-->
++
++<div style="font-family: '{FONT_NAME}'; text-align: center; padding: 45px 70px; color: #58595B;">
++
++  <!-- Viršutinė spalvota juostelė (firminės logotipo spalvos) -->
++  <table cellpadding="0" cellspacing="0" style="width: 100%; margin-bottom: 8px;">
++    <tr>
++      <td style="width: 25%; height: 6px; background-color: #006B3F;">&nbsp;</td>
++      <td style="width: 25%; height: 6px; background-color: #8FBCA8;">&nbsp;</td>
++      <td style="width: 25%; height: 6px; background-color: #FFD500;">&nbsp;</td>
++      <td style="width: 25%; height: 6px; background-color: #E30613;">&nbsp;</td>
++    </tr>
++  </table>
++
++  <p style="text-align: right; font-size: 11px; color: #9A9A9A; margin: 0 0 10px 0;">{DIP_NR}</p>
++
++  <!-- Įstaigos pavadinimas -->
++  <p style="font-size: 15px; letter-spacing: 2px; color: #58595B; margin: 0 0 4px 0;">
++    ŠIAULIŲ R. ŠVIETIMO
++  </p>
++  <p style="font-size: 15px; letter-spacing: 2px; color: #58595B; margin: 0 0 30px 0;">
++    PAGALBOS TARNYBA
++  </p>
++
++  <!-- Antraštė -->
++  <h1 style="font-size: 52px; font-weight: normal; letter-spacing: 6px; color: #58595B; margin: 0 0 6px 0;">
++    PADĖKA
++  </h1>
++
++  <!-- Trumpa žalia linija po antrašte -->
++  <table cellpadding="0" cellspacing="0" style="width: 120px; margin: 0 auto 32px auto;">
++    <tr><td style="height: 3px; background-color: #006B3F;">&nbsp;</td></tr>
++  </table>
++
++  <!-- Mokyklos pavadinimas KILMININKU + klasė + mokiniui/mokinei pagal lytį -->
++  <p style="font-size: 17px; line-height: 1.5; color: #58595B; margin: 0 0 22px 0;">
++    {MOKYKLOS}<br>
++    {KLASE} kl. {MOKINIUI}
++  </p>
++
++  <!-- Vardas Pavardė NAUDININKU (kam?) -->
++  <p style="font-size: 34px; font-weight: bold; color: #006B3F; margin: 0 0 26px 0;">
++    {VARDAS_PAVARDE_KAM}
++  </p>
++
++  <!-- Už ką dėkojama (tekstas sudėliotas kaip tikrame Jūsų diplome) -->
++  <p style="font-size: 18px; line-height: 1.6; color: #58595B; margin: 0 0 8px 0;">
++    {OLIMPIADOJE}
++  </p>
++  <p style="font-size: 18px; line-height: 1.6; color: #58595B; margin: 0 0 40px 0;">
++    {UZEMUSIAM} <strong style="font-size: 22px;">{VIETA_KA}</strong>
++  </p>
++
++  <!-- Parašo dalis -->
++  <table cellpadding="0" cellspacing="0" style="width: 100%; margin-top: 30px;">
++    <tr>
++      <td style="width: 50%; text-align: left; font-size: 15px; color: #58595B;">
++        <strong>Direktorė</strong>
++      </td>
++      <td style="width: 50%; text-align: right; font-size: 15px; color: #58595B;">
++        ________________________
++      </td>
++    </tr>
++  </table>
++
++  <p style="font-size: 13px; color: #9A9A9A; margin-top: 34px;">{DATA}</p>
++
++  <!-- Apatinė spalvota juostelė -->
++  <table cellpadding="0" cellspacing="0" style="width: 100%; margin-top: 12px;">
++    <tr>
++      <td style="width: 25%; height: 6px; background-color: #E30613;">&nbsp;</td>
++      <td style="width: 25%; height: 6px; background-color: #FFD500;">&nbsp;</td>
++      <td style="width: 25%; height: 6px; background-color: #8FBCA8;">&nbsp;</td>
++      <td style="width: 25%; height: 6px; background-color: #006B3F;">&nbsp;</td>
++    </tr>
++  </table>
++
++</div>
+diff --git a/modules/admin/diploma_template.php b/modules/admin/diploma_template.php
+index fc1dc05..b9b26ac 100644
+--- a/modules/admin/diploma_template.php
++++ b/modules/admin/diploma_template.php
+@@ -111,10 +111,19 @@ document.addEventListener("DOMContentLoaded", function() {
+                             { type: 'menuitem', text: 'Diplomo numeris', onAction: function () { editor.insertContent(' <strong>{DIP_NR}</strong> '); } },
+                             { type: 'menuitem', text: 'Sistemos Logotipas', onAction: function () { editor.insertContent(' <p>{LOGO}</p> '); } },
+                             { type: 'menuitem', text: 'Užimta vieta', onAction: function () { editor.insertContent(' <strong>{VIETA}</strong> '); } },
+-                            { type: 'menuitem', text: 'Mokinio Vardas Pavardė', onAction: function () { editor.insertContent(' <strong>{VARDAS_PAVARDE}</strong> '); } },
+-                            { type: 'menuitem', text: 'Mokykla', onAction: function () { editor.insertContent(' {MOKYKLA} '); } },
++                            { type: 'menuitem', text: 'Data', onAction: function () { editor.insertContent(' {DATA} '); } },
++                            { type: 'separator' },
++                            { type: 'menuitem', text: 'Vardas Pavardė (kas? - Brigita Daukšaitė)', onAction: function () { editor.insertContent(' <strong>{VARDAS_PAVARDE}</strong> '); } },
++                            { type: 'menuitem', text: 'Vardas Pavardė (kam? - Brigitai Daukšaitei)', onAction: function () { editor.insertContent(' <strong>{VARDAS_PAVARDE_KAM}</strong> '); } },
++                            { type: 'menuitem', text: 'Mokykla (kas? - ... gimnazija)', onAction: function () { editor.insertContent(' {MOKYKLA} '); } },
++                            { type: 'menuitem', text: 'Mokykla (ko? - ... gimnazijos)', onAction: function () { editor.insertContent(' {MOKYKLOS} '); } },
++                            { type: 'menuitem', text: 'Klasė', onAction: function () { editor.insertContent(' {KLASE} '); } },
++                            { type: 'menuitem', text: 'mokiniui / mokinei (pagal lytį)', onAction: function () { editor.insertContent(' {MOKINIUI} '); } },
++                            { type: 'menuitem', text: 'mokinys / mokinė (pagal lytį)', onAction: function () { editor.insertContent(' {MOKINYS} '); } },
++                            { type: 'menuitem', text: 'užėmusiam / užėmusiai (pagal lytį)', onAction: function () { editor.insertContent(' {UZEMUSIAM} '); } },
++                            { type: 'separator' },
+                             { type: 'menuitem', text: 'Olimpiados pavadinimas', onAction: function () { editor.insertContent(' „{OLIMPIADA}“ '); } },
+-                            { type: 'menuitem', text: 'Data', onAction: function () { editor.insertContent(' {DATA} '); } }
++                            { type: 'menuitem', text: 'Ruošęs mokytojas', onAction: function () { editor.insertContent(' {MOKYTOJAS} '); } }
+                         ];
+                         callback(items);
+                     }
+diff --git a/modules/registration/edit_participant.php b/modules/registration/edit_participant.php
+index 9a29982..2570f2c 100644
+--- a/modules/registration/edit_participant.php
++++ b/modules/registration/edit_participant.php
+@@ -80,6 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+ 
+     if (empty($vardas) || empty($pavarde) || empty($klase)) {
+         set_message('Prašome užpildyti privalomus laukus (vardas, pavardė, klasė).', 'error');
++    } elseif (empty($mok_kvali)) {
++        // NAUJA: pirmo mokytojo kvalifikacija privaloma (kaip ir registracijos formoje)
++        set_message('Prašome nurodyti pirmo mokytojo kvalifikaciją.', 'error');
++    } elseif (!empty($mok2) && empty($mok2_kvali)) {
++        // NAUJA: antro mokytojo kvalifikacija privaloma TIK jei įvestas antras mokytojas
++        set_message('Įvedus antrą mokytoją, privaloma nurodyti ir jo kvalifikaciją.', 'error');
+     } else {
+         // SAUGU: patikra PRIEŠ atnaujinimą, ar pakeistas vardas+pavardė+mokykla
+         // nesusidurs su KITU jau egzistuojančiu dalyviu toje pačioje olimpiadoje
+@@ -194,7 +200,7 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
+                     </div>
+                     <div class="col-md-6 form-group mb-3">
+                         <label class="fw-bold">Mokytojo kvalifikacija</label>
+-                        <select name="1_mok_kvali" class="form-select form-control">
++                        <select name="1_mok_kvali" class="form-select form-control" required>
+                             <option value="">-- Pasirinkite --</option>
+                             <?php foreach ($qualifications as $q): $kval = $q['kategorija']; ?>
+                                 <option value="<?php echo htmlspecialchars($kval); ?>" <?php echo ($participant['1_mok_kvali'] ?? '') === $kval ? 'selected' : ''; ?>><?php echo htmlspecialchars($kval); ?></option>
+@@ -205,11 +211,11 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
+                 <div class="row">
+                     <div class="col-md-6 form-group mb-3">
+                         <label class="fw-bold text-muted">Antras mokytojas (neprivaloma)</label>
+-                        <input type="text" name="2_mok" class="form-control" value="<?php echo htmlspecialchars($participant['2_mok'] ?? ''); ?>">
++                        <input type="text" name="2_mok" id="mokytojas_2" class="form-control" value="<?php echo htmlspecialchars($participant['2_mok'] ?? ''); ?>">
+                     </div>
+                     <div class="col-md-6 form-group mb-3">
+                         <label class="fw-bold text-muted">Antro mokytojo kvalifikacija</label>
+-                        <select name="2_mok_kvali" class="form-select form-control">
++                        <select name="2_mok_kvali" id="kvalifikacija_2" class="form-select form-control">
+                             <option value="">-- Pasirinkite --</option>
+                             <?php foreach ($qualifications as $q): $kval = $q['kategorija']; ?>
+                                 <option value="<?php echo htmlspecialchars($kval); ?>" <?php echo ($participant['2_mok_kvali'] ?? '') === $kval ? 'selected' : ''; ?>><?php echo htmlspecialchars($kval); ?></option>
+@@ -243,4 +249,20 @@ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
+     </div>
+ </div>
+ 
++<script>
++// NAUJA: antro mokytojo kvalifikacija privaloma tik tada, kai įvestas antras mokytojas
++// (ta pati taisyklė kaip registracijos formoje - žr. modules/registration/register.php)
++document.addEventListener('DOMContentLoaded', function () {
++    var mokytojas2 = document.getElementById('mokytojas_2');
++    var kvalifikacija2 = document.getElementById('kvalifikacija_2');
++    if (!mokytojas2 || !kvalifikacija2) return;
++
++    function atnaujinti() {
++        kvalifikacija2.required = mokytojas2.value.trim() !== '';
++    }
++    mokytojas2.addEventListener('input', atnaujinti);
++    atnaujinti();
++});
++</script>
++
+ <?php require_once dirname(dirname(dirname(__FILE__))) . '/includes/footer.php'; ?>
+diff --git a/modules/registration/register.php b/modules/registration/register.php
+index 8accc5f..e2bc241 100644
+--- a/modules/registration/register.php
++++ b/modules/registration/register.php
+@@ -41,6 +41,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['registruoti_dalyvi'])
+     
+     $vart_id = $_SESSION['user_id'] ?? 'SISTEMA'; // Naudojame user_id (pagal jūsų login.php nustatymą)
+ 
++    // NAUJA: kvalifikacijų privalomumo patikra serveryje (JS patikra lengvai
++    // apeinama, todėl ta pati taisyklė privalo galioti ir serverio pusėje):
++    //  - pirmo mokytojo kvalifikacija PRIVALOMA visada;
++    //  - antro mokytojo kvalifikacija privaloma TIK jei įvestas antras mokytojas.
++    $kvali_klaida = '';
++    if (empty($mok_kvali)) {
++        $kvali_klaida = 'Prašome nurodyti pirmo mokytojo kvalifikaciją.';
++    } elseif (!empty($mok2) && empty($mok2_kvali)) {
++        $kvali_klaida = 'Įvedus antrą mokytoją, privaloma nurodyti ir jo kvalifikaciją.';
++    }
++
++    if ($kvali_klaida !== '') {
++        set_message($kvali_klaida, 'error');
++        redirect(current_url());
++        exit;
++    }
++
+     if (!empty($konkurso_pav) && !empty($var_mokykla) && !empty($vardas) && !empty($pavarde)) {
+         $conn = db_connect();
+         
+@@ -240,9 +257,9 @@ require_once __DIR__ . '/../../includes/header.php';
+                     </div>
+                     
+                     <div class="col-md-6 form-group mb-3">
+-                        <label class="fw-bold">Mokytojo kvalifikacija</label>
+-                        <select name="1_mok_kvali" id="kvalifikacija" class="form-select form-control">
+-                            <option value="">-- Pasirinkite (Neprivaloma) --</option>
++                        <label class="fw-bold">Mokytojo kvalifikacija <span class="text-danger">*</span></label>
++                        <select name="1_mok_kvali" id="kvalifikacija" class="form-select form-control" required>
++                            <option value="">-- Pasirinkite --</option>
+                             <?php foreach ($qualifications as $q): ?>
+                                 <option value="<?php echo htmlspecialchars($q['kategorija']); ?>"><?php echo htmlspecialchars($q['kategorija']); ?></option>
+                             <?php endforeach; ?>
+@@ -257,13 +274,14 @@ require_once __DIR__ . '/../../includes/header.php';
+                     </div>
+                     
+                     <div class="col-md-6 form-group mb-3">
+-                        <label class="fw-bold text-muted">Antro mokytojo kvalifikacija</label>
++                        <label class="fw-bold text-muted">Antro mokytojo kvalifikacija <span class="text-danger d-none" id="kval2_privaloma">*</span></label>
+                         <select name="2_mok_kvali" id="kvalifikacija_2" class="form-select form-control">
+-                            <option value="">-- Pasirinkite (Neprivaloma) --</option>
++                            <option value="">-- Pasirinkite --</option>
+                             <?php foreach ($qualifications as $q): ?>
+                                 <option value="<?php echo htmlspecialchars($q['kategorija']); ?>"><?php echo htmlspecialchars($q['kategorija']); ?></option>
+                             <?php endforeach; ?>
+                         </select>
++                        <small class="text-muted d-block mt-1">Privaloma tik tuo atveju, jei įvestas antras mokytojas.</small>
+                     </div>
+                 </div>
+ 
+@@ -307,7 +325,28 @@ document.addEventListener('DOMContentLoaded', function() {
+     const kvalifikacijaInput = document.getElementById('kvalifikacija');
+     const rezultataiDiv = document.getElementById('paieskos-rezultatai');
+     const konkursoSelect = document.getElementById('konkurso_pav');
+-    
++
++    // NAUJA: antro mokytojo kvalifikacija tampa PRIVALOMA tik tada, kai
++    // įvedamas antras mokytojas. Jei antro mokytojo laukas tuščias -
++    // kvalifikacija lieka neprivaloma (ne visada yra antras mokytojas).
++    const mokytojas2Input = document.getElementById('mokytojas_2');
++    const kvalifikacija2Select = document.getElementById('kvalifikacija_2');
++    const kval2Zvaigzdute = document.getElementById('kval2_privaloma');
++
++    function atnaujintiAntroMokytojoKvalifikacija() {
++        if (!mokytojas2Input || !kvalifikacija2Select) return;
++        const yraAntrasMokytojas = mokytojas2Input.value.trim() !== '';
++        kvalifikacija2Select.required = yraAntrasMokytojas;
++        if (kval2Zvaigzdute) {
++            kval2Zvaigzdute.classList.toggle('d-none', !yraAntrasMokytojas);
++        }
++    }
++
++    if (mokytojas2Input) {
++        mokytojas2Input.addEventListener('input', atnaujintiAntroMokytojoKvalifikacija);
++        atnaujintiAntroMokytojoKvalifikacija(); // pradinė būsena (pvz. po klaidos perkrovimo)
++    }
++
+     let timeout = null;
+ 
+     // NAUJA: pasikeitus olimpiadai, paslepiame senus paieškos rezultatus,
+diff --git a/modules/reports/diplomas.php b/modules/reports/diplomas.php
+index b9b2284..21a93f5 100644
+--- a/modules/reports/diplomas.php
++++ b/modules/reports/diplomas.php
+@@ -76,12 +76,53 @@ if ($zip->open($zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE)
+ // Nenaudojame addTTFfont, nes TCPDF jau turi dejavusans šriftą. Tai be galo pagreitina sistemą!
+ $font_name = 'dejavusans';
+ 
+-// Užkrauname admino redaguotą šabloną
++// =========================================================================
++// ŠABLONO UŽKROVIMAS
++//
++// IŠTAISYTA KRITINĖ KLAIDA: anksčiau šis failas skaitydavo SENĄ
++// "config/diploma_template.html", o administratoriaus redaktorius
++// (modules/admin/diploma_template.php) savo pakeitimus išsaugo į NAUJĄ
++// "config/diploma_layout.json" - todėl VISI šablono redagavimai buvo
++// tyliai ignoruojami, o PDF visada generuodavosi iš seno, nebeatnaujinamo
++// failo. Dabar pirmenybė teikiama JSON failui (tam, kurį realiai
++// redaguoja administratorius), o senas HTML naudojamas tik kaip atsarginis
++// variantas senoms sistemoms.
++// =========================================================================
++$layout_file   = $root . '/config/diploma_layout.json';
+ $template_file = $root . '/config/diploma_template.html';
+-if (file_exists($template_file)) {
++
++$html_template = '<div style="font-family:\'{FONT_NAME}\'; text-align:center;"><h2>{VARDAS_PAVARDE}</h2><p>{VIETA}</p></div>';
++$dip_margins   = ['t' => 0, 'b' => 0, 'l' => 0, 'r' => 0];
++
++if (file_exists($layout_file)) {
++    $dip_layout = json_decode(file_get_contents($layout_file), true);
++    if (is_array($dip_layout) && !empty($dip_layout['content_html'])) {
++        $html_template = $dip_layout['content_html'];
++        $dip_margins = [
++            't' => (int)($dip_layout['margin_t'] ?? 0),
++            'b' => (int)($dip_layout['margin_b'] ?? 0),
++            'l' => (int)($dip_layout['margin_l'] ?? 0),
++            'r' => (int)($dip_layout['margin_r'] ?? 0),
++        ];
++    }
++} elseif (file_exists($template_file)) {
+     $html_template = file_get_contents($template_file);
+-} else {
+-    $html_template = '<div style="font-family:\'{FONT_NAME}\'; text-align:center;"><h2>{VARDAS_PAVARDE}</h2><p>{VIETA}</p></div>';
++}
++
++// =========================================================================
++// FONO PAVEIKSLĖLIS (įstaigos firminis blankas)
++//
++// Jei assets/img/ kataloge yra diploma_bg.jpg (arba .png), jis bus
++// nupieštas per visą A4 lapą PRIEŠ tekstą - taip diplomas/padėka gauna
++// tikrą įstaigos firminį dizainą (spalvas, logotipą, ornamentus), o
++// šablone tereikia rašyti patį tekstą.
++// =========================================================================
++$bg_image = null;
++foreach (['diploma_bg.jpg', 'diploma_bg.jpeg', 'diploma_bg.png'] as $bg_candidate) {
++    if (file_exists($root . '/assets/img/' . $bg_candidate)) {
++        $bg_image = $root . '/assets/img/' . $bg_candidate;
++        break;
++    }
+ }
+ 
+ // Ciklas generuoja kiekvieną PDF ir deda į ZIP
+@@ -94,20 +135,71 @@ foreach ($prizininkai as $d) {
+     // Išjungiame antraštes/paraštes, kad neeikvotų atminties
+     $pdf->setPrintHeader(false);
+     $pdf->setPrintFooter(false);
+-    $pdf->SetMargins(0, 0, 0);
++    // PATAISYTA: naudojamos administratoriaus nustatytos paraštės iš šablono
++    // (anksčiau jos būdavo išsaugomos, bet niekada nepritaikomos generuojant PDF)
++    $pdf->SetMargins($dip_margins['l'], $dip_margins['t'], $dip_margins['r']);
+     $pdf->SetAutoPageBreak(false);
+     $pdf->AddPage();
+ 
++    // NAUJA: firminis fonas per visą lapą (jei įkeltas) - piešiamas PIRMAS,
++    // kad visas tekstas atsidurtų virš jo
++    if ($bg_image !== null) {
++        $pdf->Image($bg_image, 0, 0, 210, 297, '', '', '', false, 300, '', false, false, 0);
++        $pdf->setPageMark();
++    }
++
+     $year = date('Y', strtotime($d['pil_data'] ?? date('Y-m-d')));
+     $dip_nr = sprintf("DIP-%d-%03d", $year, $d['reg_id']);
+     $vietos = ['I' => 'I vieta', 'II' => 'II vieta', 'III' => 'III vieta', 'laureat.' => 'Laureatas'];
+     $vieta = $vietos[$d['Vieta']] ?? 'Dalyvis';
++    // NAUJA: vieta GALININKU - reikalinga po dalyvio "užėmusiam/užėmusiai"
++    // ("užėmusiai I vietą", ne "užėmusiai I vieta")
++    $vietos_ka = ['I' => 'I vietą', 'II' => 'II vietą', 'III' => 'III vietą', 'laureat.' => 'laureato vietą'];
++    $vieta_ka = $vietos_ka[$d['Vieta']] ?? 'dalyvio vietą';
+     $data = date('Y m. d d.', strtotime($d['pil_data'] ?? date('Y-m-d')));
+ 
++    // =====================================================================
++    // NAUJA: automatiškai sulinksniuoti kintamieji (žr. config/functions.php)
++    // Leidžia šablone rašyti taisyklinga lietuvių kalba, pvz.:
++    //   "{MOKYKLOS} {KLASE} {MOKINIUI} {VARDAS_PAVARDE_KAM} ...
++    //    olimpiados Savivaldybės etape {UZEMUSIAM} {VIETA}"
++    // =====================================================================
++    $vardas_raw   = $d['1_vardas'] ?? '';
++    $pavarde_raw  = $d['1_pavarde'] ?? '';
++    $mokykla_raw  = $d['mokykla'] ?? $d['var_mokykla'] ?? '';
++    $gender       = lt_guess_gender($vardas_raw, $pavarde_raw);
++
++    $vardas_kam   = lt_name_to_dative($vardas_raw, $pavarde_raw);
++    $mokyklos     = lt_school_to_genitive($mokykla_raw);
++    $mokiniui     = lt_student_word($gender, 'n');   // mokiniui / mokinei
++    $mokinys      = lt_student_word($gender, 'v');   // mokinys / mokinė
++    $uzemusiam    = lt_participle_uzemus($gender);   // užėmusiam / užėmusiai
++
+     // Šablono kintamųjų pakeitimas realiomis reikšmėmis
+     $html = str_replace(
+-        ['{FONT_NAME}', '{DIP_NR}', '{LOGO}', '{VIETA}', '{VARDAS_PAVARDE}', '{MOKYKLA}', '{OLIMPIADA}', '{DATA}'],
+-        [$font_name, $dip_nr, $logo_svg ?? '', $vieta, htmlspecialchars($d['1_vardas'] . ' ' . $d['1_pavarde']), htmlspecialchars($d['mokykla'] ?? $d['var_mokykla']), htmlspecialchars($d['konkurso_pav']), $data],
++        [
++            '{FONT_NAME}', '{DIP_NR}', '{LOGO}', '{VIETA}',
++            '{VARDAS_PAVARDE}', '{MOKYKLA}', '{OLIMPIADA}', '{DATA}',
++            // Nauji, sulinksniuoti kintamieji:
++            '{VARDAS_PAVARDE_KAM}', '{MOKYKLOS}', '{MOKINIUI}', '{MOKINYS}',
++            '{UZEMUSIAM}', '{KLASE}', '{MOKYTOJAS}', '{VIETA_KA}', '{OLIMPIADOJE}'
++        ],
++        [
++            $font_name, $dip_nr, $logo_svg ?? '', $vieta,
++            htmlspecialchars($vardas_raw . ' ' . $pavarde_raw),
++            htmlspecialchars($mokykla_raw),
++            htmlspecialchars($d['konkurso_pav']),
++            $data,
++            htmlspecialchars($vardas_kam),
++            htmlspecialchars($mokyklos),
++            htmlspecialchars($mokiniui),
++            htmlspecialchars($mokinys),
++            htmlspecialchars($uzemusiam),
++            htmlspecialchars($d['1_klase'] ?? ''),
++            htmlspecialchars($d['1_mok'] ?? ''),
++            $vieta_ka,
++            htmlspecialchars(lt_event_to_locative($d['konkurso_pav'] ?? ''))
++        ],
+         $html_template
+     );
+ 

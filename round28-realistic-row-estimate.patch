@@ -1,0 +1,25 @@
+diff --git a/config/functions.php b/config/functions.php
+index 1d097f8..ef17037 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -244,8 +244,19 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
+     // Vienos eilutės aukščio įvertis: šrifto dydis (pt -> mm) * eilutės aukščio
+     // koeficientas + langelio vidinis tarpas (6px viršuje ir apačioje, žr. CSS
+     // "table.print-table td { padding: 6px 8px; }") + rėmelio storis.
++    //
++    // PATAISYTA: koeficientas 1.3 -> 2.2. Realūs sistemos duomenys (ilgi mokyklų
++    // ir mokytojų pavadinimai) dažnai NEPATELPA į vieną teksto eilutę siaurame
++    // lentelės stulpelyje ir PERSISKIRIA į 2-3 eilutes (pvz. "Lauryno Ivinskio
++    // gimnazija") - PHP negali iš anksto tiksliai žinoti, kada tai nutiks, nes tai
++    // priklauso nuo tikro teksto ilgio IR stulpelio pločio realiame naršyklės
++    // atvaizdavime. Ankstesnis įvertis (1.3, vienos eilutės prielaida) realiai
++    // apskaičiuodavo per daug eilučių (pvz. 19, kai realiai telpa tik 12) - naujas,
++    // konservatyvesnis koeficientas artimesnis realybei, bet VIS TIEK yra tik
++    // įvertis. Tiksliam rezultatui naudokite rankinį "rows_per_page" nustatymą
++    // (žr. modules/admin/print_template.php) - jis visada turi pirmenybę.
+     $pt_to_mm = 0.3528;
+-    $line_height_factor = 1.3;
++    $line_height_factor = 2.2;
+     $cell_padding_mm = 12 * 0.2646; // 6px + 6px, 1px ≈ 0.2646mm (96dpi)
+     $row_height_mm = ($font_size * $pt_to_mm * $line_height_factor) + $cell_padding_mm + 0.6;
+ 

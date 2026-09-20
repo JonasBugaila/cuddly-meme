@@ -1,0 +1,397 @@
+diff --git a/modules/reports/diploma_render.php b/modules/reports/diploma_render.php
+new file mode 100644
+index 0000000..6ad3396
+--- /dev/null
++++ b/modules/reports/diploma_render.php
+@@ -0,0 +1,139 @@
++<?php
++/**
++ * BENDRA DIPLOMŲ/PADĖKŲ ŠABLONO LOGIKA
++ *
++ * Šis failas sukurtas todėl, kad ta pati šablono užkrovimo ir kintamųjų
++ * pakeitimo logika anksčiau buvo NUKOPIJUOTA dviejuose failuose
++ * (modules/reports/diplomas.php ir modules/reports/export_diplomas.php).
++ * Dėl to jie laikui bėgant išsiskyrė: vienas buvo pataisytas, kitas ne,
++ * ir masinis eksportas generuodavo diplomus pagal seną šabloną be linksnių.
++ *
++ * Dabar abu failai naudoja TAS PAČIAS funkcijas - pataisymas vienoje vietoje
++ * automatiškai galioja ir pavieniam, ir masiniam generavimui.
++ */
++
++/**
++ * Užkrauna administratoriaus šabloną.
++ *
++ * Pirmenybė teikiama config/diploma_layout.json (tam failui, kurį realiai
++ * redaguoja modules/admin/diploma_template.php). Senas
++ * config/diploma_template.html naudojamas tik kaip atsarginis variantas.
++ *
++ * Grąžina masyvą: ['html' => ..., 'margins' => [...], 'bg' => kelias|null]
++ */
++function diploma_load_template($root) {
++    $layout_file   = $root . '/config/diploma_layout.json';
++    $template_file = $root . '/config/diploma_template.html';
++
++    $result = [
++        'html'    => '<div style="font-family:\'{FONT_NAME}\'; text-align:center;"><h2>{VARDAS_PAVARDE}</h2><p>{VIETA}</p></div>',
++        'margins' => ['t' => 0, 'b' => 0, 'l' => 0, 'r' => 0],
++        'bg'      => null,
++    ];
++
++    if (file_exists($layout_file)) {
++        $layout = json_decode(file_get_contents($layout_file), true);
++        if (is_array($layout) && !empty($layout['content_html'])) {
++            $result['html'] = $layout['content_html'];
++            $result['margins'] = [
++                't' => (int)($layout['margin_t'] ?? 0),
++                'b' => (int)($layout['margin_b'] ?? 0),
++                'l' => (int)($layout['margin_l'] ?? 0),
++                'r' => (int)($layout['margin_r'] ?? 0),
++            ];
++        }
++    } elseif (file_exists($template_file)) {
++        $result['html'] = file_get_contents($template_file);
++    }
++
++    // Firminis fonas per visą lapą (jei įkeltas į assets/img/)
++    foreach (['diploma_bg.jpg', 'diploma_bg.jpeg', 'diploma_bg.png'] as $candidate) {
++        if (file_exists($root . '/assets/img/' . $candidate)) {
++            $result['bg'] = $root . '/assets/img/' . $candidate;
++            break;
++        }
++    }
++
++    return $result;
++}
++
++/**
++ * Užpildo šabloną vieno dalyvio duomenimis - įskaitant automatiškai
++ * sulinksniuotus kintamuosius (žr. config/functions.php lt_* funkcijas).
++ *
++ * $d - dalyvio eilutė iš DB (dalyviai lentelė, gali turėti ir "mokykla" lauką)
++ */
++function diploma_fill_template($html_template, $d, $font_name = 'dejavusans', $logo_svg = '') {
++    $vardas_raw  = $d['1_vardas'] ?? '';
++    $pavarde_raw = $d['1_pavarde'] ?? '';
++    $mokykla_raw = $d['mokykla'] ?? $d['var_mokykla'] ?? '';
++    $olimpiada   = $d['konkurso_pav'] ?? '';
++
++    $gender = lt_guess_gender($vardas_raw, $pavarde_raw);
++
++    $year   = date('Y', strtotime($d['pil_data'] ?? date('Y-m-d')));
++    $dip_nr = sprintf("DIP-%d-%03d", $year, (int)($d['reg_id'] ?? 0));
++    $data   = date('Y-m-d', strtotime($d['pil_data'] ?? date('Y-m-d')));
++
++    $vietos    = ['I' => 'I vieta', 'II' => 'II vieta', 'III' => 'III vieta', 'laureat.' => 'Laureatas'];
++    $vietos_ka = ['I' => 'I vietą', 'II' => 'II vietą', 'III' => 'III vietą', 'laureat.' => 'laureato vietą'];
++    $vieta     = $vietos[$d['Vieta'] ?? ''] ?? 'Dalyvis';
++    $vieta_ka  = $vietos_ka[$d['Vieta'] ?? ''] ?? 'dalyvio vietą';
++
++    return str_replace(
++        [
++            '{FONT_NAME}', '{DIP_NR}', '{LOGO}', '{VIETA}',
++            '{VARDAS_PAVARDE}', '{MOKYKLA}', '{OLIMPIADA}', '{DATA}',
++            // Sulinksniuoti kintamieji:
++            '{VARDAS_PAVARDE_KAM}', '{MOKYKLOS}', '{MOKINIUI}', '{MOKINYS}',
++            '{UZEMUSIAM}', '{KLASE}', '{MOKYTOJAS}', '{VIETA_KA}', '{OLIMPIADOJE}'
++        ],
++        [
++            $font_name,
++            $dip_nr,
++            $logo_svg,
++            $vieta,
++            htmlspecialchars(trim($vardas_raw . ' ' . $pavarde_raw)),
++            htmlspecialchars($mokykla_raw),
++            htmlspecialchars($olimpiada),
++            $data,
++            htmlspecialchars(lt_name_to_dative($vardas_raw, $pavarde_raw)),
++            htmlspecialchars(lt_school_to_genitive($mokykla_raw)),
++            htmlspecialchars(lt_student_word($gender, 'n')),
++            htmlspecialchars(lt_student_word($gender, 'v')),
++            htmlspecialchars(lt_participle_uzemus($gender)),
++            htmlspecialchars($d['1_klase'] ?? ''),
++            htmlspecialchars($d['1_mok'] ?? ''),
++            $vieta_ka,
++            htmlspecialchars(lt_event_to_locative($olimpiada))
++        ],
++        $html_template
++    );
++}
++
++/**
++ * Sukuria vieno diplomo TCPDF objektą (su firminiu fonu ir paraštėmis).
++ * Grąžina paruoštą TCPDF objektą - kviečiantis kodas pats nusprendžia,
++ * ar jį atiduoti naršyklei ('I'), ar į ZIP ('S').
++ */
++function diploma_build_pdf($d, $template, $font_name = 'dejavusans', $logo_svg = '') {
++    $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
++    $pdf->SetCreator('Olimpiadų sistema');
++    $pdf->SetTitle('Diplomas - ' . trim(($d['1_vardas'] ?? '') . ' ' . ($d['1_pavarde'] ?? '')));
++    $pdf->setPrintHeader(false);
++    $pdf->setPrintFooter(false);
++    $pdf->SetMargins($template['margins']['l'], $template['margins']['t'], $template['margins']['r']);
++    $pdf->SetAutoPageBreak(false);
++    $pdf->AddPage();
++
++    // Firminis fonas piešiamas PIRMAS, kad tekstas atsidurtų virš jo
++    if (!empty($template['bg'])) {
++        $pdf->Image($template['bg'], 0, 0, 210, 297, '', '', '', false, 300, '', false, false, 0);
++        $pdf->setPageMark();
++    }
++
++    $html = diploma_fill_template($template['html'], $d, $font_name, $logo_svg);
++    $pdf->writeHTML($html, true, false, true, false, '');
++
++    return $pdf;
++}
+diff --git a/modules/reports/diplomas.php b/modules/reports/diplomas.php
+index 21a93f5..c8dd91b 100644
+--- a/modules/reports/diplomas.php
++++ b/modules/reports/diplomas.php
+@@ -14,9 +14,47 @@ require_once $root . '/config/db_connect.php';
+ require_once $root . '/config/functions.php';
+ require_once $root . '/vendor/tcpdf/tcpdf.php';
+ require_once __DIR__ . '/diploma_style.php';
++require_once __DIR__ . '/diploma_render.php';
+ 
+ if (!is_logged_in() || !is_admin()) die('Prieiga draudžiama');
+ 
++// Bendras šablonas (naudojamas ir pavieniam, ir masiniam režimui)
++$dip_template = diploma_load_template($root);
++
++// =========================================================================
++// PAVIENIO DIPLOMO REŽIMAS (?id=REG_ID)
++//
++// IŠTAISYTA: winners.php sąraše prie kiekvieno prizininko yra mygtukas
++// "PDF", nukreipiantis į diplomas.php?id=513 - bet šis failas parametro
++// "id" apskritai NESKAITYDAVO. Be jokių filtrų užklausa grąžindavo VISUS
++// prizininkus, ir vietoj vieno diplomo vartotojas gaudavo ZIP archyvą su
++// visais. Dabar nurodžius id generuojamas TIK to dalyvio diplomas ir
++// atiduodamas tiesiai naršyklei kaip PDF (be ZIP).
++// =========================================================================
++$single_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
++
++if ($single_id > 0) {
++    $sql = "SELECT d.*, m.pavadinimas AS mokykla
++            FROM dalyviai d
++            LEFT JOIN mokyklos m ON d.var_mokykla = m.pavadinimas
++            WHERE d.reg_id = ?";
++    $stmt = db_query($sql, [$single_id], 'i');
++    $dalyvis = $stmt ? db_get_row($stmt) : null;
++
++    if (!$dalyvis) {
++        die('Dalyvis nerastas.');
++    }
++
++    $pdf = diploma_build_pdf($dalyvis, $dip_template, $font_name ?? 'dejavusans', $logo_svg ?? '');
++
++    $filename = 'Diplomas_' . $dalyvis['1_vardas'] . '_' . $dalyvis['1_pavarde'] . '_' . $dalyvis['reg_id'] . '.pdf';
++    $filename = preg_replace('/[^a-zA-Z0-9_\-\.]/', '_', $filename);
++
++    // 'I' = atidaroma naršyklėje (peržiūrai), o ne priverstinai atsisiunčiama
++    $pdf->Output($filename, 'I');
++    exit;
++}
++
+ // =========================================================================
+ // 1. FILTRAVIMAS (Atitinka winners.php siunčiamus parametrus)
+ // =========================================================================
+@@ -76,134 +114,14 @@ if ($zip->open($zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== TRUE)
+ // Nenaudojame addTTFfont, nes TCPDF jau turi dejavusans šriftą. Tai be galo pagreitina sistemą!
+ $font_name = 'dejavusans';
+ 
+-// =========================================================================
+-// ŠABLONO UŽKROVIMAS
+-//
+-// IŠTAISYTA KRITINĖ KLAIDA: anksčiau šis failas skaitydavo SENĄ
+-// "config/diploma_template.html", o administratoriaus redaktorius
+-// (modules/admin/diploma_template.php) savo pakeitimus išsaugo į NAUJĄ
+-// "config/diploma_layout.json" - todėl VISI šablono redagavimai buvo
+-// tyliai ignoruojami, o PDF visada generuodavosi iš seno, nebeatnaujinamo
+-// failo. Dabar pirmenybė teikiama JSON failui (tam, kurį realiai
+-// redaguoja administratorius), o senas HTML naudojamas tik kaip atsarginis
+-// variantas senoms sistemoms.
+-// =========================================================================
+-$layout_file   = $root . '/config/diploma_layout.json';
+-$template_file = $root . '/config/diploma_template.html';
+-
+-$html_template = '<div style="font-family:\'{FONT_NAME}\'; text-align:center;"><h2>{VARDAS_PAVARDE}</h2><p>{VIETA}</p></div>';
+-$dip_margins   = ['t' => 0, 'b' => 0, 'l' => 0, 'r' => 0];
+-
+-if (file_exists($layout_file)) {
+-    $dip_layout = json_decode(file_get_contents($layout_file), true);
+-    if (is_array($dip_layout) && !empty($dip_layout['content_html'])) {
+-        $html_template = $dip_layout['content_html'];
+-        $dip_margins = [
+-            't' => (int)($dip_layout['margin_t'] ?? 0),
+-            'b' => (int)($dip_layout['margin_b'] ?? 0),
+-            'l' => (int)($dip_layout['margin_l'] ?? 0),
+-            'r' => (int)($dip_layout['margin_r'] ?? 0),
+-        ];
+-    }
+-} elseif (file_exists($template_file)) {
+-    $html_template = file_get_contents($template_file);
+-}
+-
+-// =========================================================================
+-// FONO PAVEIKSLĖLIS (įstaigos firminis blankas)
+-//
+-// Jei assets/img/ kataloge yra diploma_bg.jpg (arba .png), jis bus
+-// nupieštas per visą A4 lapą PRIEŠ tekstą - taip diplomas/padėka gauna
+-// tikrą įstaigos firminį dizainą (spalvas, logotipą, ornamentus), o
+-// šablone tereikia rašyti patį tekstą.
+-// =========================================================================
+-$bg_image = null;
+-foreach (['diploma_bg.jpg', 'diploma_bg.jpeg', 'diploma_bg.png'] as $bg_candidate) {
+-    if (file_exists($root . '/assets/img/' . $bg_candidate)) {
+-        $bg_image = $root . '/assets/img/' . $bg_candidate;
+-        break;
+-    }
+-}
+-
+ // Ciklas generuoja kiekvieną PDF ir deda į ZIP
++// PERTVARKYTA: vietoj nukopijuoto kodo naudojama bendra diploma_build_pdf()
++// funkcija (modules/reports/diploma_render.php) - ta pati, kurią naudoja ir
++// pavienio diplomo režimas bei export_diplomas.php. Taip visi trys generavimo
++// keliai visada naudoja TĄ PATĮ šabloną ir tuos pačius sulinksniuotus kintamuosius.
+ foreach ($prizininkai as $d) {
+-    // Kuriamas TCPDF objektas be disko cache, kas šiek tiek pagreitina vykdymą
+-    $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false); 
+-    $pdf->SetCreator('Olimpiadų sistema');
+-    $pdf->SetTitle('Diplomas - ' . $d['1_vardas'] . ' ' . $d['1_pavarde']);
+-    
+-    // Išjungiame antraštes/paraštes, kad neeikvotų atminties
+-    $pdf->setPrintHeader(false);
+-    $pdf->setPrintFooter(false);
+-    // PATAISYTA: naudojamos administratoriaus nustatytos paraštės iš šablono
+-    // (anksčiau jos būdavo išsaugomos, bet niekada nepritaikomos generuojant PDF)
+-    $pdf->SetMargins($dip_margins['l'], $dip_margins['t'], $dip_margins['r']);
+-    $pdf->SetAutoPageBreak(false);
+-    $pdf->AddPage();
+-
+-    // NAUJA: firminis fonas per visą lapą (jei įkeltas) - piešiamas PIRMAS,
+-    // kad visas tekstas atsidurtų virš jo
+-    if ($bg_image !== null) {
+-        $pdf->Image($bg_image, 0, 0, 210, 297, '', '', '', false, 300, '', false, false, 0);
+-        $pdf->setPageMark();
+-    }
++    $pdf = diploma_build_pdf($d, $dip_template, $font_name, $logo_svg ?? '');
+ 
+-    $year = date('Y', strtotime($d['pil_data'] ?? date('Y-m-d')));
+-    $dip_nr = sprintf("DIP-%d-%03d", $year, $d['reg_id']);
+-    $vietos = ['I' => 'I vieta', 'II' => 'II vieta', 'III' => 'III vieta', 'laureat.' => 'Laureatas'];
+-    $vieta = $vietos[$d['Vieta']] ?? 'Dalyvis';
+-    // NAUJA: vieta GALININKU - reikalinga po dalyvio "užėmusiam/užėmusiai"
+-    // ("užėmusiai I vietą", ne "užėmusiai I vieta")
+-    $vietos_ka = ['I' => 'I vietą', 'II' => 'II vietą', 'III' => 'III vietą', 'laureat.' => 'laureato vietą'];
+-    $vieta_ka = $vietos_ka[$d['Vieta']] ?? 'dalyvio vietą';
+-    $data = date('Y m. d d.', strtotime($d['pil_data'] ?? date('Y-m-d')));
+-
+-    // =====================================================================
+-    // NAUJA: automatiškai sulinksniuoti kintamieji (žr. config/functions.php)
+-    // Leidžia šablone rašyti taisyklinga lietuvių kalba, pvz.:
+-    //   "{MOKYKLOS} {KLASE} {MOKINIUI} {VARDAS_PAVARDE_KAM} ...
+-    //    olimpiados Savivaldybės etape {UZEMUSIAM} {VIETA}"
+-    // =====================================================================
+-    $vardas_raw   = $d['1_vardas'] ?? '';
+-    $pavarde_raw  = $d['1_pavarde'] ?? '';
+-    $mokykla_raw  = $d['mokykla'] ?? $d['var_mokykla'] ?? '';
+-    $gender       = lt_guess_gender($vardas_raw, $pavarde_raw);
+-
+-    $vardas_kam   = lt_name_to_dative($vardas_raw, $pavarde_raw);
+-    $mokyklos     = lt_school_to_genitive($mokykla_raw);
+-    $mokiniui     = lt_student_word($gender, 'n');   // mokiniui / mokinei
+-    $mokinys      = lt_student_word($gender, 'v');   // mokinys / mokinė
+-    $uzemusiam    = lt_participle_uzemus($gender);   // užėmusiam / užėmusiai
+-
+-    // Šablono kintamųjų pakeitimas realiomis reikšmėmis
+-    $html = str_replace(
+-        [
+-            '{FONT_NAME}', '{DIP_NR}', '{LOGO}', '{VIETA}',
+-            '{VARDAS_PAVARDE}', '{MOKYKLA}', '{OLIMPIADA}', '{DATA}',
+-            // Nauji, sulinksniuoti kintamieji:
+-            '{VARDAS_PAVARDE_KAM}', '{MOKYKLOS}', '{MOKINIUI}', '{MOKINYS}',
+-            '{UZEMUSIAM}', '{KLASE}', '{MOKYTOJAS}', '{VIETA_KA}', '{OLIMPIADOJE}'
+-        ],
+-        [
+-            $font_name, $dip_nr, $logo_svg ?? '', $vieta,
+-            htmlspecialchars($vardas_raw . ' ' . $pavarde_raw),
+-            htmlspecialchars($mokykla_raw),
+-            htmlspecialchars($d['konkurso_pav']),
+-            $data,
+-            htmlspecialchars($vardas_kam),
+-            htmlspecialchars($mokyklos),
+-            htmlspecialchars($mokiniui),
+-            htmlspecialchars($mokinys),
+-            htmlspecialchars($uzemusiam),
+-            htmlspecialchars($d['1_klase'] ?? ''),
+-            htmlspecialchars($d['1_mok'] ?? ''),
+-            $vieta_ka,
+-            htmlspecialchars(lt_event_to_locative($d['konkurso_pav'] ?? ''))
+-        ],
+-        $html_template
+-    );
+-
+-    $pdf->writeHTML($html, true, false, true, false, '');
+     
+     // Gauname PDF failą tiesiai į serverio RAM (neprašome išsaugoti į diską)
+     $pdf_content = $pdf->Output('', 'S'); 
+diff --git a/modules/reports/export_diplomas.php b/modules/reports/export_diplomas.php
+index 8375e83..20b0a5d 100644
+--- a/modules/reports/export_diplomas.php
++++ b/modules/reports/export_diplomas.php
+@@ -6,6 +6,7 @@ require_once $root . '/config/functions.php';
+ require_once $root . '/vendor/tcpdf/tcpdf.php';
+ require_once $root . '/vendor/tcpdf/include/tcpdf_fonts.php';
+ require_once __DIR__ . '/diploma_style.php';
++require_once __DIR__ . '/diploma_render.php';
+ 
+ if (!is_logged_in() || !is_admin()) die('Prieiga draudžiama');
+ 
+@@ -34,37 +35,18 @@ $font_file = $root . '/vendor/tcpdf/fonts/DejaVuSans.ttf';
+ if (!file_exists($font_file)) die('Trūksta šrifto: DejaVuSans.ttf');
+ $font_name = TCPDF_FONTS::addTTFfont($font_file, 'TrueTypeUnicode', '', 32);
+ 
+-// Užkrauname admino redaguotą šabloną
+-$template_file = $root . '/config/diploma_template.html';
+-if (file_exists($template_file)) {
+-    $html_template = file_get_contents($template_file);
+-} else {
+-    // Atsarginis variantas
+-    $html_template = '<div style="font-family:\'{FONT_NAME}\'; text-align:center;"><h2>{VARDAS_PAVARDE}</h2><p>{VIETA}</p></div>';
+-}
++// IŠTAISYTA: šis failas skaitydavo SENĄ config/diploma_template.html, o
++// administratoriaus redaktorius saugo į config/diploma_layout.json - todėl
++// masinis eksportas generuodavo diplomus pagal seną, nebeatnaujinamą šabloną
++// (be linksnių ir be naujų kintamųjų). Dabar naudojamas tas pats bendras
++// užkrovėjas kaip ir diplomas.php.
++$dip_template = diploma_load_template($root);
+ 
+ foreach ($prizininkai as $d) {
+-    $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8');
+-    $pdf->SetCreator('Olimpiadų sistema');
+-    $pdf->SetTitle('Diplomas - ' . $d['1_vardas'] . ' ' . $d['1_pavarde']);
+-    $pdf->SetMargins(0, 0, 0);
+-    $pdf->SetAutoPageBreak(false);
+-    $pdf->AddPage();
+-
+-    $year = date('Y', strtotime($d['pil_data']));
+-    $dip_nr = sprintf("DIP-%d-%03d", $year, $d['reg_id']);
+-    $vietos = ['I' => 'I vieta', 'II' => 'II vieta', 'III' => 'III vieta', 'laureat.' => 'Laureatas'];
+-    $vieta = $vietos[$d['Vieta']] ?? 'Dalyvis';
+-    $data = date('Y m. d d.', strtotime($d['pil_data']));
+-
+-    // Pakeičiame kintamuosius šablone realiais duomenimis
+-    $html = str_replace(
+-        ['{FONT_NAME}', '{DIP_NR}', '{LOGO}', '{VIETA}', '{VARDAS_PAVARDE}', '{MOKYKLA}', '{OLIMPIADA}', '{DATA}'],
+-        [$font_name, $dip_nr, $logo_svg, $vieta, htmlspecialchars($d['1_vardas'] . ' ' . $d['1_pavarde']), htmlspecialchars($d['mokykla'] ?? $d['var_mokykla']), htmlspecialchars($d['konkurso_pav']), $data],
+-        $html_template
+-    );
+-
+-    $pdf->writeHTML($html, true, false, true, false, '');
++    // PERTVARKYTA: naudojama bendra diploma_build_pdf() funkcija - ta pati,
++    // kurią naudoja diplomas.php (žr. modules/reports/diploma_render.php),
++    // todėl masinis eksportas visada atitinka pavienio diplomo rezultatą.
++    $pdf = diploma_build_pdf($d, $dip_template, $font_name, $logo_svg ?? '');
+     $pdf_content = $pdf->Output('', 'S'); // 'S' grąžina kaip String į ZIP archyvą
+ 
+     $filename = "Diplomas_{$d['1_vardas']}_{$d['1_pavarde']}.pdf";

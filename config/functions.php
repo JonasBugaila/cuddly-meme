@@ -544,10 +544,91 @@ function generate_printable_page($title, $institution, $headers, $data, $options
  * (protocols.php, evaluation_sheets.php, results/view.php) naudokite tris atskiras
  * funkcijas tiesiogiai - žr. print_document_head() komentarą aukščiau.
  */
+/**
+ * PATAISYTA (SVARBU): anksčiau ši funkcija sudėdavo VISUS duomenis į VIENĄ
+ * .print-wrapper elementą. Kol wrapper turėjo "min-height", netilpusios eilutės
+ * tiesiog persiliedavo į kitus lapus (be puslapio numerių). Perėjus prie
+ * fiksuoto "height" + overflow:hidden, tokios eilutės būtų tiesiog NUKIRPTOS -
+ * duomenys dingtų. Be to, šios ataskaitos apskritai neturėjo puslapio numerių,
+ * nes neperduodavo page_num/total_pages.
+ *
+ * Dabar funkcija pati suskaido duomenis į puslapius (lygiai taip pat, kaip tai
+ * daro protocols.php / evaluation_sheets.php / results/view.php) ir kiekvienam
+ * puslapiui prideda numerį. Kviečiantiems failams keistis nereikia.
+ */
 function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
     $html = print_document_head($layout_key);
-    $html .= generate_printable_page($title, $institution, $headers, $data, $options, $layout_key);
+    $html .= render_report_sections([
+        [
+            'title'       => $title,
+            'institution' => $institution,
+            'headers'     => $headers,
+            'data'        => $data,
+        ]
+    ], $layout_key, $options);
     $html .= print_document_foot();
+    return $html;
+}
+
+/**
+ * NAUJA: sudeda vieną ar kelis ataskaitos skyrius į puslapiuotą HTML.
+ *
+ * Kiekvieno skyriaus duomenys suskaidomi pagal šablono talpą, kiekvienas
+ * puslapis įdedamas į atskirą fiksuoto aukščio .print-wrapper, o puslapiai
+ * numeruojami IŠTISAI per visą dokumentą ("1 iš 7", "2 iš 7", ...).
+ * Poraštė (parašai) rodoma tik paskutiniame kiekvieno skyriaus puslapyje.
+ *
+ * $sections - [['title'=>, 'institution'=>, 'headers'=>, 'data'=>], ...]
+ */
+function render_report_sections(array $sections, $layout_key = 'protocol', $options = []) {
+    $layout = get_print_layout($layout_key);
+    $rows_per_page  = calculate_rows_per_page($layout, false);
+    $rows_last_page = calculate_rows_per_page($layout, true);
+
+    // 1. Iš anksto suskaidome visus skyrius, kad žinotume BENDRĄ puslapių skaičių
+    $prepared = [];
+    $total_pages = 0;
+    foreach ($sections as $section) {
+        $chunks = paginate_with_footer_reserve(
+            $section['data'] ?? [],
+            $rows_per_page,
+            $rows_last_page
+        );
+        $prepared[] = ['section' => $section, 'chunks' => $chunks];
+        $total_pages += count($chunks);
+    }
+    if ($total_pages < 1) {
+        $total_pages = 1;
+    }
+
+    // 2. Atvaizduojame su ištisine numeracija
+    $html = '';
+    $page_num = 0;
+    foreach ($prepared as $item) {
+        $section = $item['section'];
+        $chunks  = $item['chunks'];
+        $last_chunk_index = count($chunks) - 1;
+
+        foreach ($chunks as $i => $chunk) {
+            $page_num++;
+            $html .= '<div class="olympiad-section" style="page-break-after: always;">';
+            $html .= generate_printable_page(
+                $section['title'] ?? '',
+                $section['institution'] ?? '',
+                $section['headers'] ?? [],
+                $chunk,
+                array_merge($options, [
+                    // Poraštė (parašai) - tik paskutiniame ŠIO skyriaus puslapyje
+                    'is_last_page' => ($i === $last_chunk_index),
+                    'page_num'     => $page_num,
+                    'total_pages'  => $total_pages,
+                ]),
+                $layout_key
+            );
+            $html .= '</div>';
+        }
+    }
+
     return $html;
 }
 

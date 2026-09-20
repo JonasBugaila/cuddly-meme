@@ -1,0 +1,44 @@
+diff --git a/config/functions.php b/config/functions.php
+index ef17037..a5526a5 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -392,25 +392,24 @@ function print_document_head($layout_key = 'protocol') {
+             .screen-loader { display: none !important; }
+             .print-wrapper {
+                 position: relative; left: auto; top: auto; visibility: visible;
+-                /* PATAISYTA #7: flexbox GALUTINAI atmestas - dokumentuota naršyklių
+-                   spausdinimo variklių problema, kad "page-break-after: always"
+-                   nepatikimai veikia, kai puslapio turinio konteineris yra flex
+-                   konteineris (display:flex ant .print-wrapper). Realiuose testuose
+-                   tai pasireiškė kaip puslapio numerio rodymas TIK kas kelias
+-                   duomenų "porcijas", o ne kiekviename fiziniame puslapyje - pats
+-                   priverstinis lūžis tarp .olympiad-section/.evaluation-section
+-                   blokų tapdavo nepatikimas. Grąžinta prie paprasto blokinio
+-                   išdėstymo (be flex) - su šiuo variantu page-break-after veikė
+-                   patikimai (patvirtinta ankstesniuose testuose), tik numeris
+-                   nebūtinai lygiuojasi lygiai su fizine lapo apačia (žr. .page-number
+-                   žemiau - tai sąmoningas kompromisas, žr. calculate_rows_per_page()
+-                   dėl rezervuotos vietos skaičiavimo). */
++                display: flex;
++                flex-direction: column;
++                /* PATAISYTA #8: flexbox bandomas dar kartą - ankstesnis nepavykimas
++                   (numeris rodydavosi tik kas kelias duomenų "porcijas") greičiausiai
++                   buvo susijęs su NETEISINGU eilučių/puslapyje įverčiu (19, kai
++                   realiai telpo tik 12) - turinys persiliedavo už apskaičiuoto
++                   konteinerio min-height ribų, ir TADA page-break-after tapdavo
++                   nepatikimas. Dabar (žr. calculate_rows_per_page() - koeficientas
++                   pataisytas į realistiškesnį) turinys turėtų patikimai tilpti į
++                   apskaičiuotą aukštį, todėl margin-top:auto turėtų veikti be
++                   persiliejimo. Aukštis atitinka TĄ PATĮ plotą, kurį naudoja
++                   calculate_rows_per_page() savo skaičiavime. */
++                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
+                 box-sizing: border-box;
+             }
+             .page-number {
+-                margin-top: 15px;
++                margin-top: auto;
+                 padding-top: 8px;
+-                border-top: 1px solid #ccc;
+                 text-align: center;
+                 font-size: 10pt;
+                 color: #666;

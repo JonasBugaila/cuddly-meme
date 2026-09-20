@@ -1,0 +1,568 @@
+diff --git a/config/functions.php b/config/functions.php
+index 287c0bb..953dd82 100644
+--- a/config/functions.php
++++ b/config/functions.php
+@@ -544,13 +544,94 @@ function generate_printable_page($title, $institution, $headers, $data, $options
+  * (protocols.php, evaluation_sheets.php, results/view.php) naudokite tris atskiras
+  * funkcijas tiesiogiai - žr. print_document_head() komentarą aukščiau.
+  */
++/**
++ * PATAISYTA (SVARBU): anksčiau ši funkcija sudėdavo VISUS duomenis į VIENĄ
++ * .print-wrapper elementą. Kol wrapper turėjo "min-height", netilpusios eilutės
++ * tiesiog persiliedavo į kitus lapus (be puslapio numerių). Perėjus prie
++ * fiksuoto "height" + overflow:hidden, tokios eilutės būtų tiesiog NUKIRPTOS -
++ * duomenys dingtų. Be to, šios ataskaitos apskritai neturėjo puslapio numerių,
++ * nes neperduodavo page_num/total_pages.
++ *
++ * Dabar funkcija pati suskaido duomenis į puslapius (lygiai taip pat, kaip tai
++ * daro protocols.php / evaluation_sheets.php / results/view.php) ir kiekvienam
++ * puslapiui prideda numerį. Kviečiantiems failams keistis nereikia.
++ */
+ function generate_printable_table($title, $institution, $headers, $data, $options = [], $layout_key = 'protocol') {
+     $html = print_document_head($layout_key);
+-    $html .= generate_printable_page($title, $institution, $headers, $data, $options, $layout_key);
++    $html .= render_report_sections([
++        [
++            'title'       => $title,
++            'institution' => $institution,
++            'headers'     => $headers,
++            'data'        => $data,
++        ]
++    ], $layout_key, $options);
+     $html .= print_document_foot();
+     return $html;
+ }
+ 
++/**
++ * NAUJA: sudeda vieną ar kelis ataskaitos skyrius į puslapiuotą HTML.
++ *
++ * Kiekvieno skyriaus duomenys suskaidomi pagal šablono talpą, kiekvienas
++ * puslapis įdedamas į atskirą fiksuoto aukščio .print-wrapper, o puslapiai
++ * numeruojami IŠTISAI per visą dokumentą ("1 iš 7", "2 iš 7", ...).
++ * Poraštė (parašai) rodoma tik paskutiniame kiekvieno skyriaus puslapyje.
++ *
++ * $sections - [['title'=>, 'institution'=>, 'headers'=>, 'data'=>], ...]
++ */
++function render_report_sections(array $sections, $layout_key = 'protocol', $options = []) {
++    $layout = get_print_layout($layout_key);
++    $rows_per_page  = calculate_rows_per_page($layout, false);
++    $rows_last_page = calculate_rows_per_page($layout, true);
++
++    // 1. Iš anksto suskaidome visus skyrius, kad žinotume BENDRĄ puslapių skaičių
++    $prepared = [];
++    $total_pages = 0;
++    foreach ($sections as $section) {
++        $chunks = paginate_with_footer_reserve(
++            $section['data'] ?? [],
++            $rows_per_page,
++            $rows_last_page
++        );
++        $prepared[] = ['section' => $section, 'chunks' => $chunks];
++        $total_pages += count($chunks);
++    }
++    if ($total_pages < 1) {
++        $total_pages = 1;
++    }
++
++    // 2. Atvaizduojame su ištisine numeracija
++    $html = '';
++    $page_num = 0;
++    foreach ($prepared as $item) {
++        $section = $item['section'];
++        $chunks  = $item['chunks'];
++        $last_chunk_index = count($chunks) - 1;
++
++        foreach ($chunks as $i => $chunk) {
++            $page_num++;
++            $html .= '<div class="olympiad-section" style="page-break-after: always;">';
++            $html .= generate_printable_page(
++                $section['title'] ?? '',
++                $section['institution'] ?? '',
++                $section['headers'] ?? [],
++                $chunk,
++                array_merge($options, [
++                    // Poraštė (parašai) - tik paskutiniame ŠIO skyriaus puslapyje
++                    'is_last_page' => ($i === $last_chunk_index),
++                    'page_num'     => $page_num,
++                    'total_pages'  => $total_pages,
++                ]),
++                $layout_key
++            );
++            $html .= '</div>';
++        }
++    }
++
++    return $html;
++}
++
+ function get_konkursai_events() {
+     if (!function_exists('db_connect')) { return []; }
+     $conn = db_connect();
+diff --git a/modules/reports/analitika.php b/modules/reports/analitika.php
+index 7e0343c..21873dd 100644
+--- a/modules/reports/analitika.php
++++ b/modules/reports/analitika.php
+@@ -22,8 +22,6 @@
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
+ 
+ if (!is_logged_in()) {
+     set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
+@@ -193,9 +191,10 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+ }
+ 
+ // ---------------------------------------------------------
+-// SPAUSDINIMO REŽIMAS - generuoja PDF per bendrą TCPDF variklį (report_pdf.php)
++// SPAUSDINIMO REŽIMAS - naudoja tą pačią generate_printable_table() kaip kitos ataskaitos
+ // ---------------------------------------------------------
+ if (isset($_GET['print']) && $_GET['print'] === '1') {
++    header('Content-Type: text/html; charset=UTF-8');
+     $print_sql = $core_sql . " LIMIT 1000";
+     $rows = db_get_results(db_query($print_sql, $having_params, $having_types));
+ 
+@@ -212,9 +211,10 @@ if (isset($_GET['print']) && $_GET['print'] === '1') {
+         'top_teachers_registrations' => 'Mokytojai pagal užregistruotų dalyvių skaičių',
+     ];
+ 
+-    // PERTVARKYTA: generuojama kaip PDF per TCPDF variklį - puslapio numeris
+-    // "X iš Y" automatiškai kiekvieno lapo apačioje dešinėje.
+-    report_pdf_simple($mode_titles[$mode], 'Švietimo pagalbos tarnyba', $headers, $print_data, 'protocol', 'Analitika_' . $mode . '.pdf');
++    echo generate_printable_table($mode_titles[$mode], 'Švietimo pagalbos tarnyba', $headers, $print_data, [
++        'include_back_button' => true
++    ], 'protocol');
++    exit;
+ }
+ 
+ // ---------------------------------------------------------
+diff --git a/modules/reports/evaluation_sheets.php b/modules/reports/evaluation_sheets.php
+index 63c457b..7e5e267 100644
+--- a/modules/reports/evaluation_sheets.php
++++ b/modules/reports/evaluation_sheets.php
+@@ -5,8 +5,6 @@
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
+ 
+ if (!is_logged_in()) {
+     set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
+@@ -87,35 +85,58 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
+         $headers[] = 'Kitas etapas';
+     }
+     
+-    // PERTVARKYTA: ataskaita generuojama kaip PDF per TCPDF variklį
+-    // (modules/reports/report_pdf.php). Nebereikia jokio eilučių skaičiavimo,
+-    // duomenų dalijimo į "porcijas" ar CSS gudrybių - TCPDF pats perkelia
+-    // netelpančias eilutes į kitą lapą, kartoja lentelės antraštę ir
+-    // KIEKVIENO lapo apačioje dešinėje rašo puslapio numerį "X iš Y".
+-    $data = [];
+-    foreach ($participants as $participant) {
+-        if ($print_empty_mode) {
+-            $row = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
+-            if ($is_smsm) { $row[] = ''; }
+-        } else {
+-            $row = [
+-                $participant['reg_id'], '-', '-', '-', '-', '-', '-', '-', '-', '-', '-',
+-                $participant['Balai'] ?? '-',
+-                $participant['Vieta'] ?? '-'
+-            ];
+-            if ($is_smsm) {
+-                $etapas_txt = '-';
+-                if (($participant['kitas_etapas'] ?? 0) == 1) $etapas_txt = 'Siunčiamas';
+-                elseif (($participant['kitas_etapas'] ?? 0) == 2) $etapas_txt = 'Nesiunčiamas';
+-                $row[] = $etapas_txt;
++    // PATAISYTA #2: poraštė (footer_html - parašai, data) turi rodytis TIK dokumento
++    // pabaigoje (paskutiniame puslapyje), o ne kiekviename atskirai. Kadangi tarpiniams
++    // puslapiams (be poraštės) telpa daugiau eilučių nei paskutiniam (su porašte),
++    // naudojame du skirtingus talpos įverčius ir protingą skaidymo funkciją.
++    $print_layout = get_print_layout('evaluation');
++    $rows_per_page = calculate_rows_per_page($print_layout, false);      // tarpiniai puslapiai
++    $rows_last_page = calculate_rows_per_page($print_layout, true);      // paskutinis puslapis (su porašte)
++    $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
++    $total_pages = count($chunks);
++
++    // NAUJA: tinkamos HTML5 dokumento pradžios (<!DOCTYPE>, <head> su vienu <style>
++    // bloku) atspausdinimas VIENĄ kartą prieš visus puslapius - žr. paaiškinimą
++    // config/functions.php -> print_document_head().
++    echo print_document_head('evaluation');
++
++    foreach ($chunks as $page_num => $chunk) {
++        $data = [];
++        foreach ($chunk as $participant) {
++            if ($print_empty_mode) {
++                $row = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
++                if ($is_smsm) { $row[] = ''; }
++            } else {
++                $row = [
++                    $participant['reg_id'], '-', '-', '-', '-', '-', '-', '-', '-', '-', '-',
++                    $participant['Balai'] ?? '-',
++                    $participant['Vieta'] ?? '-'
++                ];
++                if ($is_smsm) {
++                    $etapas_txt = '-';
++                    if (($participant['kitas_etapas'] ?? 0) == 1) $etapas_txt = 'Siunčiamas';
++                    elseif (($participant['kitas_etapas'] ?? 0) == 2) $etapas_txt = 'Nesiunčiamas';
++                    $row[] = $etapas_txt;
++                }
+             }
++            $data[] = $row;
+         }
+-        $data[] = $row;
++
++        echo '<div class="evaluation-section" style="page-break-after: always;">';
++        echo generate_printable_page($selected_olympiad, '', $headers, $data, [
++            'signature_text' => 'Atsakingo asmens parašas',
++            'signature_name' => '',
++            'include_back_button' => false,
++            'is_last_page' => ($page_num + 1 === $total_pages),
++            'page_num' => $page_num + 1,
++            'total_pages' => $total_pages
++        ], 'evaluation');
++        
++        echo '</div>';
+     }
+ 
+-    $pdf = report_pdf_create('evaluation');
+-    report_pdf_add_section($pdf, $selected_olympiad, '', $headers, $data, 'evaluation');
+-    report_pdf_output($pdf, 'Vertinimo_lapai_' . $selected_olympiad . '.pdf');
++    echo print_document_foot();
++    exit; 
+ }
+ 
+ require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';
+diff --git a/modules/reports/participant_id.php b/modules/reports/participant_id.php
+index 66c930e..43edc82 100644
+--- a/modules/reports/participant_id.php
++++ b/modules/reports/participant_id.php
+@@ -10,8 +10,6 @@
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
+ 
+ // Tikriname ar vartotojas prisijungęs ir turi administratoriaus teises
+ if (!is_logged_in()) {
+@@ -74,9 +72,11 @@ if ($print_mode) {
+     $institution = 'Švietimo pagalbos tarnyba';
+     
+    // Spausdiname lentelę
+-    // PERTVARKYTA: generuojama kaip PDF per TCPDF variklį - puslapio numeris
+-    // "X iš Y" automatiškai kiekvieno lapo apačioje dešinėje.
+-    report_pdf_simple($title, $institution, $headers, $data, 'codes', 'Kodu_lapas.pdf');
++    echo generate_printable_table($title, $institution, $headers, $data, [
++        'signature_text' => 'Atsakingo asmens parašas',
++        'signature_name' => '',
++        'include_back_button' => true
++    ], 'codes');
+     
+     exit;
+ }
+diff --git a/modules/reports/protocols.php b/modules/reports/protocols.php
+index 50822c4..a7fbb78 100644
+--- a/modules/reports/protocols.php
++++ b/modules/reports/protocols.php
+@@ -9,8 +9,6 @@
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
+ 
+ // Tikriname, ar vartotojas prisijungęs
+ if (!is_logged_in()) {
+@@ -115,49 +113,73 @@ if ($print_mode && !empty($grouped_participants)) {
+ 
+     // PATAISYTA #2: du talpos įverčiai (tarpinis/paskutinis puslapis su porašte) -
+     // žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
+-    // PERTVARKYTA: protokolai generuojami kaip PDF per TCPDF variklį
+-    // (modules/reports/report_pdf.php). Kiekviena olimpiada pradedama naujame
+-    // lape; netelpančias eilutes TCPDF pats perkelia toliau, o kiekvieno lapo
+-    // apačioje dešinėje rašo puslapio numerį "X iš Y".
+-    $pdf = report_pdf_create('protocol');
++    $print_layout = get_print_layout('protocol');
++    $rows_per_page = calculate_rows_per_page($print_layout, false);
++    $rows_last_page = calculate_rows_per_page($print_layout, true);
+ 
+-    foreach ($grouped_participants as $olympiad_name => $participants) {
+-        $data = [];
+-        foreach ($participants as $p) {
+-            // Saugus tuščių reikšmių apdorojimas (Apsauga nuo PHP 8 Deprecated klaidų)
+-            $balai = (isset($p['Balai']) && $p['Balai'] !== '') ? $p['Balai'] : '—';
+-            $vieta = (!empty($p['Vieta'])) ? $p['Vieta'] : '—';
+-            $mokytojas = (!empty($p['1_mok'])) ? $p['1_mok'] : '—';
++    // NAUJA: viena bendra dokumento pradžia (<!DOCTYPE>, vienas <style> blokas) visoms
++    // olimpiadoms kartu, ne kiekvienai atskirai - žr. paaiškinimą
++    // config/functions.php -> print_document_head().
++    echo print_document_head('protocol');
+ 
+-            $row = [
+-                htmlspecialchars($vieta),
+-                htmlspecialchars(($p['1_vardas'] ?? '') . ' ' . ($p['1_pavarde'] ?? '')),
+-                htmlspecialchars($p['1_klase'] ?? '-'),
+-                htmlspecialchars($p['mokykla'] ?? '-'),
+-                htmlspecialchars($mokytojas),
+-                htmlspecialchars($balai)
+-            ];
++    foreach ($grouped_participants as $olympiad_name => $participants) {
++        
++        // NAUJA: kiekvienai olimpiadai poraštė (parašai) rodoma jos PAČIOS paskutiniame
++        // puslapyje - $total_pages skaičiuojamas atskirai kiekvienai olimpiadai.
++        $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
++        $total_pages = count($chunks);
+ 
+-            if ($is_smsm) {
+-                // Konvertuojame skaičių (iš DB) į žodį spausdinimui
+-                $kitas_etapas_tekstas = '—';
+-                if (isset($p['kitas_etapas'])) {
+-                    if ($p['kitas_etapas'] == 1) {
+-                        $kitas_etapas_tekstas = 'Siunčiamas';
+-                    } elseif ($p['kitas_etapas'] == 2) {
+-                        $kitas_etapas_tekstas = 'Nesiunčiamas';
++        foreach ($chunks as $page_num => $chunk) {
++            $data = [];
++            foreach ($chunk as $p) {
++                // Saugus tuščių reikšmių apdorojimas (Apsauga nuo PHP 8 Deprecated klaidų)
++                $balai = (isset($p['Balai']) && $p['Balai'] !== '') ? $p['Balai'] : '—';
++                $vieta = (!empty($p['Vieta'])) ? $p['Vieta'] : '—';
++                $mokytojas = (!empty($p['1_mok'])) ? $p['1_mok'] : '—';
++                
++                $row = [
++                    htmlspecialchars($vieta),
++                    htmlspecialchars(($p['1_vardas'] ?? '') . ' ' . ($p['1_pavarde'] ?? '')),
++                    htmlspecialchars($p['1_klase'] ?? '-'),
++                    htmlspecialchars($p['mokykla'] ?? '-'),
++                    htmlspecialchars($mokytojas),
++                    htmlspecialchars($balai)
++                ];
++                
++                if ($is_smsm) {
++                    // Konvertuojame skaičių (iš DB) į žodį spausdinimui
++                    $kitas_etapas_tekstas = '—';
++                    if (isset($p['kitas_etapas'])) {
++                        if ($p['kitas_etapas'] == 1) {
++                            $kitas_etapas_tekstas = 'Siunčiamas';
++                        } elseif ($p['kitas_etapas'] == 2) {
++                            $kitas_etapas_tekstas = 'Nesiunčiamas';
++                        }
+                     }
++                    $row[] = htmlspecialchars($kitas_etapas_tekstas);
+                 }
+-                $row[] = htmlspecialchars($kitas_etapas_tekstas);
++                
++                $data[] = $row;
+             }
+ 
+-            $data[] = $row;
++            echo '<div class="olympiad-section" style="page-break-after: always;">';
++            
++            // IŠTAISYTA: Pridėtas 'protocol' parametras spausdinimo funkcijai
++            echo generate_printable_page($olympiad_name, '', $headers, $data, [
++                'signature_text' => 'Atsakingo asmens parašas',
++                'signature_name' => '',
++                'include_back_button' => false,
++                'back_button_text' => 'Grįžti',
++                'is_last_page' => ($page_num + 1 === $total_pages),
++                'page_num' => $page_num + 1,
++                'total_pages' => $total_pages
++            ], 'protocol');
++            
++            echo '</div>';
+         }
+-
+-        report_pdf_add_section($pdf, $olympiad_name, '', $headers, $data, 'protocol');
+     }
+ 
+-    report_pdf_output($pdf, 'Protokolai_' . date('Y-m-d') . '.pdf');
++    echo print_document_foot();
+ 
+     exit; // Nutraukiame vykdymą, kad neužkrautų vizualinės dalies spausdinimo metu
+ }
+diff --git a/modules/reports/school_olympiad_report_V2.php b/modules/reports/school_olympiad_report_V2.php
+index 50e9cc9..bad5931 100644
+--- a/modules/reports/school_olympiad_report_V2.php
++++ b/modules/reports/school_olympiad_report_V2.php
+@@ -7,8 +7,6 @@
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
+ 
+ // Tikriname, ar vartotojas prisijungęs
+ if (!is_logged_in()) {
+@@ -204,11 +202,15 @@ foreach ($results as $row) {
+ 
+ // === SPAUSDINIMAS ===
+ if ($print_mode && !empty($grouped_data)) {
+-    // PERTVARKYTA: generuojama kaip PDF per TCPDF variklį. Kiekvienas
+-    // mokyklos/olimpiados derinys pradedamas naujame lape, o puslapio numeris
+-    // "X iš Y" automatiškai rašomas kiekvieno lapo apačioje dešinėje.
+-    $pdf = report_pdf_create('protocol');
+-
++    header('Content-Type: text/html; charset=UTF-8');
++
++    // PERTVARKYTA: anksčiau čia buvo kuriamas SAVAS HTML karkasas, o viduje
++    // cikle kviečiama generate_printable_table() - kuri pati grąžina PILNĄ
++    // dokumentą (<!DOCTYPE>, <head>, <body>). Rezultatas - keli įdėti dokumentai
++    // viename faile, dėl to puslapių numeracija ir lūžiai tapdavo nenuspėjami.
++    // Dabar visi skyriai sudedami į VIENĄ dokumentą per render_report_sections(),
++    // o puslapiai numeruojami ištisai ("1 iš 12", "2 iš 12", ...).
++    $sections = [];
+     foreach ($grouped_data as $mokykla => $olimpiados) {
+         foreach ($olimpiados as $olimpiada => $dalyviai) {
+             $headers = ['Eil.', 'Vardas', 'Pavardė', 'Klasė', 'Mokykla', 'Mokytojai', 'Balai', 'Vieta'];
+@@ -234,11 +236,19 @@ if ($print_mode && !empty($grouped_data)) {
+                 ];
+             }
+ 
+-            report_pdf_add_section($pdf, $mokykla, $olimpiada, $headers, $data, 'protocol');
++            $sections[] = [
++                'title'       => $mokykla,
++                'institution' => $olimpiada,
++                'headers'     => $headers,
++                'data'        => $data,
++            ];
+         }
+     }
+ 
+-    report_pdf_output($pdf, 'Mokyklu_ataskaita_' . date('Y-m-d') . '.pdf');
++    echo print_document_head('protocol');
++    echo render_report_sections($sections, 'protocol', ['include_back_button' => false]);
++    echo print_document_foot();
++    exit;
+ }
+ 
+ // Įtraukiame antraštę naršyklės vaizdui
+diff --git a/modules/reports/signature_sheets.php b/modules/reports/signature_sheets.php
+index d701192..dc0aa59 100644
+--- a/modules/reports/signature_sheets.php
++++ b/modules/reports/signature_sheets.php
+@@ -9,8 +9,6 @@
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
+ 
+ // Tikriname ar vartotojas prisijungęs ir turi administratoriaus teises
+ if (!is_logged_in()) {
+@@ -92,9 +90,11 @@ if ($print_mode) {
+     $institution = 'Švietimo pagalbos tarnyba';
+     
+    // Spausdiname lentelę
+-    // PERTVARKYTA: generuojama kaip PDF per TCPDF variklį - puslapio numeris
+-    // "X iš Y" automatiškai kiekvieno lapo apačioje dešinėje.
+-    report_pdf_simple($title, $institution, $headers, $data, 'signature', 'Parasu_lapas.pdf');
++    echo generate_printable_table($title, $institution, $headers, $data, [
++        'signature_text' => 'Atsakingo asmens parašas',
++        'signature_name' => '',
++        'include_back_button' => true
++    ], 'signature');
+     
+     exit;
+ }
+diff --git a/modules/results/view.php b/modules/results/view.php
+index 744c4a1..723714c 100644
+--- a/modules/results/view.php
++++ b/modules/results/view.php
+@@ -8,8 +8,6 @@
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
+ require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+-require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
+ 
+ // Tikriname ar vartotojas prisijungęs
+ if (!is_logged_in()) {
+@@ -110,39 +108,59 @@ if ($print_mode && !empty($participants)) {
+         $headers[] = 'Kitas etapas';
+     }
+ 
+-    // PERTVARKYTA: rezultatai generuojami kaip PDF per TCPDF variklį
+-    // (modules/reports/report_pdf.php) - puslapio numeris "X iš Y" automatiškai
+-    // kiekvieno lapo apačioje dešinėje, puslapių lūžiai taip pat automatiniai.
+-    $data = [];
+-    foreach ($participants as $p) {
+-        $balai = (isset($p['Balai']) && $p['Balai'] !== '') ? $p['Balai'] : '-';
+-        $vieta = !empty($p['Vieta']) ? $p['Vieta'] : '-';
++    // PATAISYTA #2: poraštė rodoma tik paskutiniame puslapyje - žr. paaiškinimą
++    // modules/reports/evaluation_sheets.php faile.
++    $print_layout = get_print_layout('protocol');
++    $rows_per_page = calculate_rows_per_page($print_layout, false);
++    $rows_last_page = calculate_rows_per_page($print_layout, true);
++    $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
++    $total_pages = count($chunks);
+ 
+-        $row = [
+-            htmlspecialchars($p['reg_id']),
+-            htmlspecialchars($p['1_vardas'] ?? ''),
+-            htmlspecialchars($p['1_pavarde'] ?? ''),
+-            htmlspecialchars($p['1_klase'] ?? ''),
+-            htmlspecialchars($p['var_mokykla'] ?? ''),
+-            htmlspecialchars($p['1_mok'] ?? '-'),
+-            htmlspecialchars($p['2_mok'] ?? '-'),
+-            htmlspecialchars($balai),
+-            htmlspecialchars($vieta)
+-        ];
++    echo print_document_head('protocol');
+ 
+-        if ($is_smsm) {
+-            $kitas_etapas_tekstas = '—';
+-            if (($p['kitas_etapas'] ?? 0) == 1) $kitas_etapas_tekstas = 'Siunčiamas';
+-            elseif (($p['kitas_etapas'] ?? 0) == 2) $kitas_etapas_tekstas = 'Nesiunčiamas';
+-            $row[] = htmlspecialchars($kitas_etapas_tekstas);
++    foreach ($chunks as $page_num => $chunk) {
++        $data = [];
++        foreach ($chunk as $p) {
++            $balai = (isset($p['Balai']) && $p['Balai'] !== '') ? $p['Balai'] : '-';
++            $vieta = !empty($p['Vieta']) ? $p['Vieta'] : '-';
++            
++            $row = [
++                htmlspecialchars($p['reg_id']),
++                htmlspecialchars($p['1_vardas'] ?? ''),
++                htmlspecialchars($p['1_pavarde'] ?? ''),
++                htmlspecialchars($p['1_klase'] ?? ''),
++                htmlspecialchars($p['var_mokykla'] ?? ''),
++                htmlspecialchars($p['1_mok'] ?? '-'),
++                htmlspecialchars($p['2_mok'] ?? '-'),
++                htmlspecialchars($balai),
++                htmlspecialchars($vieta)
++            ];
++            
++            if ($is_smsm) {
++                $kitas_etapas_tekstas = '—';
++                if (($p['kitas_etapas'] ?? 0) == 1) $kitas_etapas_tekstas = 'Siunčiamas';
++                elseif (($p['kitas_etapas'] ?? 0) == 2) $kitas_etapas_tekstas = 'Nesiunčiamas';
++                $row[] = htmlspecialchars($kitas_etapas_tekstas);
++            }
++            
++            $data[] = $row;
+         }
+ 
+-        $data[] = $row;
++        echo '<div class="olympiad-section" style="page-break-after: always;">';
++        
++        echo generate_printable_page($olympiad['konkurso_pav'] . ' - Rezultatai', '', $headers, $data, [
++            'include_back_button' => false,
++            'is_last_page' => ($page_num + 1 === $total_pages),
++            'page_num' => $page_num + 1,
++            'total_pages' => $total_pages
++        ], 'protocol');
++        
++        echo '</div>';
+     }
+ 
+-    $pdf = report_pdf_create('protocol');
+-    report_pdf_add_section($pdf, $olympiad['konkurso_pav'] . ' - Rezultatai', '', $headers, $data, 'protocol');
+-    report_pdf_output($pdf, 'Rezultatai_' . $olympiad['konkurso_pav'] . '.pdf');
++    echo print_document_foot();
++
++    exit;
+ }
+ 
+ // Įtraukiame antraštę naršyklės vaizdui

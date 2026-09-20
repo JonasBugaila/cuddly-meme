@@ -7,8 +7,6 @@
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
-require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
-require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
 
 // Tikriname, ar vartotojas prisijungęs
 if (!is_logged_in()) {
@@ -204,11 +202,15 @@ foreach ($results as $row) {
 
 // === SPAUSDINIMAS ===
 if ($print_mode && !empty($grouped_data)) {
-    // PERTVARKYTA: generuojama kaip PDF per TCPDF variklį. Kiekvienas
-    // mokyklos/olimpiados derinys pradedamas naujame lape, o puslapio numeris
-    // "X iš Y" automatiškai rašomas kiekvieno lapo apačioje dešinėje.
-    $pdf = report_pdf_create('protocol');
+    header('Content-Type: text/html; charset=UTF-8');
 
+    // PERTVARKYTA: anksčiau čia buvo kuriamas SAVAS HTML karkasas, o viduje
+    // cikle kviečiama generate_printable_table() - kuri pati grąžina PILNĄ
+    // dokumentą (<!DOCTYPE>, <head>, <body>). Rezultatas - keli įdėti dokumentai
+    // viename faile, dėl to puslapių numeracija ir lūžiai tapdavo nenuspėjami.
+    // Dabar visi skyriai sudedami į VIENĄ dokumentą per render_report_sections(),
+    // o puslapiai numeruojami ištisai ("1 iš 12", "2 iš 12", ...).
+    $sections = [];
     foreach ($grouped_data as $mokykla => $olimpiados) {
         foreach ($olimpiados as $olimpiada => $dalyviai) {
             $headers = ['Eil.', 'Vardas', 'Pavardė', 'Klasė', 'Mokykla', 'Mokytojai', 'Balai', 'Vieta'];
@@ -234,11 +236,19 @@ if ($print_mode && !empty($grouped_data)) {
                 ];
             }
 
-            report_pdf_add_section($pdf, $mokykla, $olimpiada, $headers, $data, 'protocol');
+            $sections[] = [
+                'title'       => $mokykla,
+                'institution' => $olimpiada,
+                'headers'     => $headers,
+                'data'        => $data,
+            ];
         }
     }
 
-    report_pdf_output($pdf, 'Mokyklu_ataskaita_' . date('Y-m-d') . '.pdf');
+    echo print_document_head('protocol');
+    echo render_report_sections($sections, 'protocol', ['include_back_button' => false]);
+    echo print_document_foot();
+    exit;
 }
 
 // Įtraukiame antraštę naršyklės vaizdui
