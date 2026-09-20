@@ -372,8 +372,14 @@ function print_document_head($layout_key = 'protocol') {
     // patekti (naršyklė spausdina tik iki @page paraščių ribos), todėl puslapio
     // numeris visada telpa toje pačioje vietoje kiekviename lape, nepriklausomai nuo
     // turinio kiekio ar eilučių skaičiaus įverčio tikslumo.
-    $page_number_reserve_mm = 25;
-    $effective_margin_b = (int)($layout['margin_b'] ?? 20) + $page_number_reserve_mm;
+    // PATAISYTA: apatinė paraštė NEBEDIDINAMA. Anksčiau prie jos buvo pridedama
+    // 25 mm "numerio juosta", nes numeris buvo rašomas normaliame turinio sraute
+    // ir jam reikėjo realios vietos. Dabar numeris pozicionuojamas absoliučiai
+    // (vietos sraute neužima), todėl padidinta paraštė tik nustumdavo jį ~4,5 cm
+    // nuo lapo krašto. Vietos rezervas, kad paskutinė eilutė nepersidengtų su
+    // numeriu, ir toliau užtikrinamas calculate_rows_per_page() funkcijoje
+    // (žr. $page_number_reserve_mm ten) - t.y. eilučių tiesiog skaičiuojama mažiau.
+    $effective_margin_b = (int)($layout['margin_b'] ?? 20);
 
     $html = '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';
 
@@ -392,28 +398,33 @@ function print_document_head($layout_key = 'protocol') {
             .screen-loader { display: none !important; }
             .print-wrapper {
                 position: relative; left: auto; top: auto; visibility: visible;
-                display: flex;
-                flex-direction: column;
-                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
+                /* PATAISYTA #10 (esminė): naudojamas FIKSUOTAS height, o ne min-height.
+                   Tai buvo tikroji visų ankstesnių nesėkmių priežastis - su min-height
+                   blokas gali IŠAUGTI, kai turinys netelpa, ir tada "bottom: 0"
+                   nusileidžia į KITĄ fizinį lapą (todėl numeris atsirasdavo atskirame,
+                   tuščiame puslapyje). Fiksuotas aukštis to neleidžia: blokas VISADA
+                   lygiai vieno puslapio aukščio, todėl absoliučiai pozicionuotas
+                   numeris visada lieka to paties lapo apačioje.
+                   overflow:hidden - apsauga, kad persipildęs turinys neišstumtų maketo. */
+                height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
+                overflow: hidden;
                 box-sizing: border-box;
             }
-            /* PATAISYTA #9: paskutinis puslapis (su TIKRA porašte - parašais) turi
-               daugiau realaus turinio nei tarpiniai puslapiai (kurių porastė tuščia),
-               bet calculate_rows_per_page() jau atėmė 35mm iš EILUČIŲ SKAIČIAUS šiam
-               puslapiui (žr. $footer_buffer_mm) - CSS min-height TURI atspindėti tą
-               patį sumažinimą, kitaip flex konteineris persipildo BŪTENT paskutiniame
-               puslapyje (ten, kur turinys "pasikeičia" pridėjus realią porastę), ir
-               margin-top:auto nustoja patikimai veikti. Ši klasė pridedama TIK
-               paskutinio puslapio .print-wrapper elementui (žr. generate_printable_page()).*/
-            .print-wrapper.is-last-page {
-                min-height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm - 35mm);
-            }
             .page-number {
-                margin-top: auto;
-                padding-top: 8px;
-                text-align: center;
+                /* Absoliučiai prilipdytas prie fiksuoto aukščio .print-wrapper
+                   apatinio DEŠINIOJO kampo - todėl visada tos pačios lapo apačioje. */
+                position: absolute;
+                bottom: 0;
+                right: 0;
+                text-align: right;
                 font-size: 10pt;
                 color: #666;
+            }
+            /* Paskutinis skyrius be priverstinio lūžio - kitaip susidaro
+               papildomas tuščias lapas dokumento gale. */
+            .evaluation-section:last-of-type,
+            .olympiad-section:last-of-type {
+                page-break-after: auto !important;
             }
             body {
                 background: #fff !important; padding: 0 !important;
@@ -481,10 +492,12 @@ function generate_printable_page($title, $institution, $headers, $data, $options
     $print_id = 'print_' . uniqid();
 
     // NAUJA: nustatome ANKSTI (prieš atidarant .print-wrapper), ar tai paskutinis
-    // puslapis - reikia CSS klasei "is-last-page" (žr. print_document_head() CSS
+    // puslapis - reikia poraštės rodymo logikai (žr. $footer_html_output žemiau).
     // dėl min-height skirtumo tarp paprastų ir paskutinio puslapio).
     $is_last_page = !isset($options['is_last_page']) || $options['is_last_page'] === true;
-    $wrapper_class = 'print-wrapper' . ($is_last_page ? ' is-last-page' : '');
+    // PASTABA: atskiros "is-last-page" CSS klasės nebereikia - su fiksuoto aukščio
+    // .print-wrapper visi puslapiai yra vienodo aukščio (žr. print_document_head()).
+    $wrapper_class = 'print-wrapper';
 
     $html = '<div id="' . $print_id . '_printable" class="' . $wrapper_class . '">';
     $html .= '<div class="print-header">' . $header_html . '</div>';
@@ -509,7 +522,7 @@ function generate_printable_page($title, $institution, $headers, $data, $options
     // šablono "show_page_num" nustatymas daugiau NEBETIKRINAMAS.
     $page_num_html = '';
     if (isset($options['page_num']) && isset($options['total_pages'])) {
-        $page_num_html = '<div class="page-number">Puslapis ' . (int)$options['page_num'] . ' iš ' . (int)$options['total_pages'] . '</div>';
+        $page_num_html = '<div class="page-number">' . (int)$options['page_num'] . ' iš ' . (int)$options['total_pages'] . '</div>';
     }
 
     // NAUJA: naudojame anksčiau (prieš .print-wrapper atidarymą) apskaičiuotą
