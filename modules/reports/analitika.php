@@ -22,6 +22,8 @@
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
 
 if (!is_logged_in()) {
     set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
@@ -191,10 +193,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 }
 
 // ---------------------------------------------------------
-// SPAUSDINIMO REŽIMAS - naudoja tą pačią generate_printable_table() kaip kitos ataskaitos
+// SPAUSDINIMO REŽIMAS - generuoja PDF per bendrą TCPDF variklį (report_pdf.php)
 // ---------------------------------------------------------
 if (isset($_GET['print']) && $_GET['print'] === '1') {
-    header('Content-Type: text/html; charset=UTF-8');
     $print_sql = $core_sql . " LIMIT 1000";
     $rows = db_get_results(db_query($print_sql, $having_params, $having_types));
 
@@ -211,10 +212,9 @@ if (isset($_GET['print']) && $_GET['print'] === '1') {
         'top_teachers_registrations' => 'Mokytojai pagal užregistruotų dalyvių skaičių',
     ];
 
-    echo generate_printable_table($mode_titles[$mode], 'Švietimo pagalbos tarnyba', $headers, $print_data, [
-        'include_back_button' => true
-    ], 'protocol');
-    exit;
+    // PERTVARKYTA: generuojama kaip PDF per TCPDF variklį - puslapio numeris
+    // "X iš Y" automatiškai kiekvieno lapo apačioje dešinėje.
+    report_pdf_simple($mode_titles[$mode], 'Švietimo pagalbos tarnyba', $headers, $print_data, 'protocol', 'Analitika_' . $mode . '.pdf');
 }
 
 // ---------------------------------------------------------

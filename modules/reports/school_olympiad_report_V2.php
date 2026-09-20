@@ -7,6 +7,8 @@
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
 
 // Tikriname, ar vartotojas prisijungęs
 if (!is_logged_in()) {
@@ -202,13 +204,11 @@ foreach ($results as $row) {
 
 // === SPAUSDINIMAS ===
 if ($print_mode && !empty($grouped_data)) {
-    header('Content-Type: text/html; charset=UTF-8');
-    
-    // Paruošiame minimalų HTML karkasą spausdinimui
-    echo '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';
-    echo '<style>body{font-family:Arial,sans-serif;} .page-break{page-break-after:always; margin-bottom:30px;}</style>';
-    echo '</head><body>';
-    
+    // PERTVARKYTA: generuojama kaip PDF per TCPDF variklį. Kiekvienas
+    // mokyklos/olimpiados derinys pradedamas naujame lape, o puslapio numeris
+    // "X iš Y" automatiškai rašomas kiekvieno lapo apačioje dešinėje.
+    $pdf = report_pdf_create('protocol');
+
     foreach ($grouped_data as $mokykla => $olimpiados) {
         foreach ($olimpiados as $olimpiada => $dalyviai) {
             $headers = ['Eil.', 'Vardas', 'Pavardė', 'Klasė', 'Mokykla', 'Mokytojai', 'Balai', 'Vieta'];
@@ -233,16 +233,12 @@ if ($print_mode && !empty($grouped_data)) {
                     htmlspecialchars($d['Vieta'] ?? '-')
                 ];
             }
-            echo '<div class="page-break">';
-            echo generate_printable_table($mokykla, $olimpiada, $headers, $data, ['include_back_button' => false], 'results');
-            echo '</div>';
+
+            report_pdf_add_section($pdf, $mokykla, $olimpiada, $headers, $data, 'protocol');
         }
     }
-    
-    // Automatiškai iššaukia spausdinimo langą
-    echo '<script>window.onload = function() { window.print(); }</script>';
-    echo '</body></html>';
-    exit;
+
+    report_pdf_output($pdf, 'Mokyklu_ataskaita_' . date('Y-m-d') . '.pdf');
 }
 
 // Įtraukiame antraštę naršyklės vaizdui

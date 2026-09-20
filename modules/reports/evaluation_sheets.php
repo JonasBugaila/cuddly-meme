@@ -5,6 +5,8 @@
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
 
 if (!is_logged_in()) {
     set_message('Turite prisijungti, kad galėtumėte pasiekti šį puslapį', 'error');
@@ -85,58 +87,35 @@ if (($print_mode || $print_empty_mode) && !empty($selected_olympiad)) {
         $headers[] = 'Kitas etapas';
     }
     
-    // PATAISYTA #2: poraštė (footer_html - parašai, data) turi rodytis TIK dokumento
-    // pabaigoje (paskutiniame puslapyje), o ne kiekviename atskirai. Kadangi tarpiniams
-    // puslapiams (be poraštės) telpa daugiau eilučių nei paskutiniam (su porašte),
-    // naudojame du skirtingus talpos įverčius ir protingą skaidymo funkciją.
-    $print_layout = get_print_layout('evaluation');
-    $rows_per_page = calculate_rows_per_page($print_layout, false);      // tarpiniai puslapiai
-    $rows_last_page = calculate_rows_per_page($print_layout, true);      // paskutinis puslapis (su porašte)
-    $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
-    $total_pages = count($chunks);
-
-    // NAUJA: tinkamos HTML5 dokumento pradžios (<!DOCTYPE>, <head> su vienu <style>
-    // bloku) atspausdinimas VIENĄ kartą prieš visus puslapius - žr. paaiškinimą
-    // config/functions.php -> print_document_head().
-    echo print_document_head('evaluation');
-
-    foreach ($chunks as $page_num => $chunk) {
-        $data = [];
-        foreach ($chunk as $participant) {
-            if ($print_empty_mode) {
-                $row = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
-                if ($is_smsm) { $row[] = ''; }
-            } else {
-                $row = [
-                    $participant['reg_id'], '-', '-', '-', '-', '-', '-', '-', '-', '-', '-',
-                    $participant['Balai'] ?? '-',
-                    $participant['Vieta'] ?? '-'
-                ];
-                if ($is_smsm) {
-                    $etapas_txt = '-';
-                    if (($participant['kitas_etapas'] ?? 0) == 1) $etapas_txt = 'Siunčiamas';
-                    elseif (($participant['kitas_etapas'] ?? 0) == 2) $etapas_txt = 'Nesiunčiamas';
-                    $row[] = $etapas_txt;
-                }
+    // PERTVARKYTA: ataskaita generuojama kaip PDF per TCPDF variklį
+    // (modules/reports/report_pdf.php). Nebereikia jokio eilučių skaičiavimo,
+    // duomenų dalijimo į "porcijas" ar CSS gudrybių - TCPDF pats perkelia
+    // netelpančias eilutes į kitą lapą, kartoja lentelės antraštę ir
+    // KIEKVIENO lapo apačioje dešinėje rašo puslapio numerį "X iš Y".
+    $data = [];
+    foreach ($participants as $participant) {
+        if ($print_empty_mode) {
+            $row = [$participant['reg_id'], '', '', '', '', '', '', '', '', '', '', '', ''];
+            if ($is_smsm) { $row[] = ''; }
+        } else {
+            $row = [
+                $participant['reg_id'], '-', '-', '-', '-', '-', '-', '-', '-', '-', '-',
+                $participant['Balai'] ?? '-',
+                $participant['Vieta'] ?? '-'
+            ];
+            if ($is_smsm) {
+                $etapas_txt = '-';
+                if (($participant['kitas_etapas'] ?? 0) == 1) $etapas_txt = 'Siunčiamas';
+                elseif (($participant['kitas_etapas'] ?? 0) == 2) $etapas_txt = 'Nesiunčiamas';
+                $row[] = $etapas_txt;
             }
-            $data[] = $row;
         }
-
-        echo '<div class="evaluation-section" style="page-break-after: always;">';
-        echo generate_printable_page($selected_olympiad, '', $headers, $data, [
-            'signature_text' => 'Atsakingo asmens parašas',
-            'signature_name' => '',
-            'include_back_button' => false,
-            'is_last_page' => ($page_num + 1 === $total_pages),
-            'page_num' => $page_num + 1,
-            'total_pages' => $total_pages
-        ], 'evaluation');
-        
-        echo '</div>';
+        $data[] = $row;
     }
 
-    echo print_document_foot();
-    exit; 
+    $pdf = report_pdf_create('evaluation');
+    report_pdf_add_section($pdf, $selected_olympiad, '', $headers, $data, 'evaluation');
+    report_pdf_output($pdf, 'Vertinimo_lapai_' . $selected_olympiad . '.pdf');
 }
 
 require_once dirname(dirname(dirname(__FILE__))) . '/includes/header.php';

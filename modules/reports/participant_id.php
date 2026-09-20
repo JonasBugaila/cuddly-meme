@@ -10,6 +10,8 @@
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
 
 // Tikriname ar vartotojas prisijungęs ir turi administratoriaus teises
 if (!is_logged_in()) {
@@ -72,11 +74,9 @@ if ($print_mode) {
     $institution = 'Švietimo pagalbos tarnyba';
     
    // Spausdiname lentelę
-    echo generate_printable_table($title, $institution, $headers, $data, [
-        'signature_text' => 'Atsakingo asmens parašas',
-        'signature_name' => '',
-        'include_back_button' => true
-    ], 'codes');
+    // PERTVARKYTA: generuojama kaip PDF per TCPDF variklį - puslapio numeris
+    // "X iš Y" automatiškai kiekvieno lapo apačioje dešinėje.
+    report_pdf_simple($title, $institution, $headers, $data, 'codes', 'Kodu_lapas.pdf');
     
     exit;
 }

@@ -9,6 +9,8 @@
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
 
 // Tikriname, ar vartotojas prisijungęs
 if (!is_logged_in()) {
@@ -113,73 +115,49 @@ if ($print_mode && !empty($grouped_participants)) {
 
     // PATAISYTA #2: du talpos įverčiai (tarpinis/paskutinis puslapis su porašte) -
     // žr. paaiškinimą modules/reports/evaluation_sheets.php faile.
-    $print_layout = get_print_layout('protocol');
-    $rows_per_page = calculate_rows_per_page($print_layout, false);
-    $rows_last_page = calculate_rows_per_page($print_layout, true);
-
-    // NAUJA: viena bendra dokumento pradžia (<!DOCTYPE>, vienas <style> blokas) visoms
-    // olimpiadoms kartu, ne kiekvienai atskirai - žr. paaiškinimą
-    // config/functions.php -> print_document_head().
-    echo print_document_head('protocol');
+    // PERTVARKYTA: protokolai generuojami kaip PDF per TCPDF variklį
+    // (modules/reports/report_pdf.php). Kiekviena olimpiada pradedama naujame
+    // lape; netelpančias eilutes TCPDF pats perkelia toliau, o kiekvieno lapo
+    // apačioje dešinėje rašo puslapio numerį "X iš Y".
+    $pdf = report_pdf_create('protocol');
 
     foreach ($grouped_participants as $olympiad_name => $participants) {
-        
-        // NAUJA: kiekvienai olimpiadai poraštė (parašai) rodoma jos PAČIOS paskutiniame
-        // puslapyje - $total_pages skaičiuojamas atskirai kiekvienai olimpiadai.
-        $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
-        $total_pages = count($chunks);
+        $data = [];
+        foreach ($participants as $p) {
+            // Saugus tuščių reikšmių apdorojimas (Apsauga nuo PHP 8 Deprecated klaidų)
+            $balai = (isset($p['Balai']) && $p['Balai'] !== '') ? $p['Balai'] : '—';
+            $vieta = (!empty($p['Vieta'])) ? $p['Vieta'] : '—';
+            $mokytojas = (!empty($p['1_mok'])) ? $p['1_mok'] : '—';
 
-        foreach ($chunks as $page_num => $chunk) {
-            $data = [];
-            foreach ($chunk as $p) {
-                // Saugus tuščių reikšmių apdorojimas (Apsauga nuo PHP 8 Deprecated klaidų)
-                $balai = (isset($p['Balai']) && $p['Balai'] !== '') ? $p['Balai'] : '—';
-                $vieta = (!empty($p['Vieta'])) ? $p['Vieta'] : '—';
-                $mokytojas = (!empty($p['1_mok'])) ? $p['1_mok'] : '—';
-                
-                $row = [
-                    htmlspecialchars($vieta),
-                    htmlspecialchars(($p['1_vardas'] ?? '') . ' ' . ($p['1_pavarde'] ?? '')),
-                    htmlspecialchars($p['1_klase'] ?? '-'),
-                    htmlspecialchars($p['mokykla'] ?? '-'),
-                    htmlspecialchars($mokytojas),
-                    htmlspecialchars($balai)
-                ];
-                
-                if ($is_smsm) {
-                    // Konvertuojame skaičių (iš DB) į žodį spausdinimui
-                    $kitas_etapas_tekstas = '—';
-                    if (isset($p['kitas_etapas'])) {
-                        if ($p['kitas_etapas'] == 1) {
-                            $kitas_etapas_tekstas = 'Siunčiamas';
-                        } elseif ($p['kitas_etapas'] == 2) {
-                            $kitas_etapas_tekstas = 'Nesiunčiamas';
-                        }
+            $row = [
+                htmlspecialchars($vieta),
+                htmlspecialchars(($p['1_vardas'] ?? '') . ' ' . ($p['1_pavarde'] ?? '')),
+                htmlspecialchars($p['1_klase'] ?? '-'),
+                htmlspecialchars($p['mokykla'] ?? '-'),
+                htmlspecialchars($mokytojas),
+                htmlspecialchars($balai)
+            ];
+
+            if ($is_smsm) {
+                // Konvertuojame skaičių (iš DB) į žodį spausdinimui
+                $kitas_etapas_tekstas = '—';
+                if (isset($p['kitas_etapas'])) {
+                    if ($p['kitas_etapas'] == 1) {
+                        $kitas_etapas_tekstas = 'Siunčiamas';
+                    } elseif ($p['kitas_etapas'] == 2) {
+                        $kitas_etapas_tekstas = 'Nesiunčiamas';
                     }
-                    $row[] = htmlspecialchars($kitas_etapas_tekstas);
                 }
-                
-                $data[] = $row;
+                $row[] = htmlspecialchars($kitas_etapas_tekstas);
             }
 
-            echo '<div class="olympiad-section" style="page-break-after: always;">';
-            
-            // IŠTAISYTA: Pridėtas 'protocol' parametras spausdinimo funkcijai
-            echo generate_printable_page($olympiad_name, '', $headers, $data, [
-                'signature_text' => 'Atsakingo asmens parašas',
-                'signature_name' => '',
-                'include_back_button' => false,
-                'back_button_text' => 'Grįžti',
-                'is_last_page' => ($page_num + 1 === $total_pages),
-                'page_num' => $page_num + 1,
-                'total_pages' => $total_pages
-            ], 'protocol');
-            
-            echo '</div>';
+            $data[] = $row;
         }
+
+        report_pdf_add_section($pdf, $olympiad_name, '', $headers, $data, 'protocol');
     }
 
-    echo print_document_foot();
+    report_pdf_output($pdf, 'Protokolai_' . date('Y-m-d') . '.pdf');
 
     exit; // Nutraukiame vykdymą, kad neužkrautų vizualinės dalies spausdinimo metu
 }

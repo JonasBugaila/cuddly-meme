@@ -8,6 +8,8 @@
 require_once dirname(dirname(dirname(__FILE__))) . '/config/config.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/db_connect.php';
 require_once dirname(dirname(dirname(__FILE__))) . '/config/functions.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/vendor/tcpdf/tcpdf.php';
+require_once dirname(dirname(dirname(__FILE__))) . '/modules/reports/report_pdf.php';
 
 // Tikriname ar vartotojas prisijungęs
 if (!is_logged_in()) {
@@ -108,59 +110,39 @@ if ($print_mode && !empty($participants)) {
         $headers[] = 'Kitas etapas';
     }
 
-    // PATAISYTA #2: poraštė rodoma tik paskutiniame puslapyje - žr. paaiškinimą
-    // modules/reports/evaluation_sheets.php faile.
-    $print_layout = get_print_layout('protocol');
-    $rows_per_page = calculate_rows_per_page($print_layout, false);
-    $rows_last_page = calculate_rows_per_page($print_layout, true);
-    $chunks = paginate_with_footer_reserve($participants, $rows_per_page, $rows_last_page);
-    $total_pages = count($chunks);
+    // PERTVARKYTA: rezultatai generuojami kaip PDF per TCPDF variklį
+    // (modules/reports/report_pdf.php) - puslapio numeris "X iš Y" automatiškai
+    // kiekvieno lapo apačioje dešinėje, puslapių lūžiai taip pat automatiniai.
+    $data = [];
+    foreach ($participants as $p) {
+        $balai = (isset($p['Balai']) && $p['Balai'] !== '') ? $p['Balai'] : '-';
+        $vieta = !empty($p['Vieta']) ? $p['Vieta'] : '-';
 
-    echo print_document_head('protocol');
+        $row = [
+            htmlspecialchars($p['reg_id']),
+            htmlspecialchars($p['1_vardas'] ?? ''),
+            htmlspecialchars($p['1_pavarde'] ?? ''),
+            htmlspecialchars($p['1_klase'] ?? ''),
+            htmlspecialchars($p['var_mokykla'] ?? ''),
+            htmlspecialchars($p['1_mok'] ?? '-'),
+            htmlspecialchars($p['2_mok'] ?? '-'),
+            htmlspecialchars($balai),
+            htmlspecialchars($vieta)
+        ];
 
-    foreach ($chunks as $page_num => $chunk) {
-        $data = [];
-        foreach ($chunk as $p) {
-            $balai = (isset($p['Balai']) && $p['Balai'] !== '') ? $p['Balai'] : '-';
-            $vieta = !empty($p['Vieta']) ? $p['Vieta'] : '-';
-            
-            $row = [
-                htmlspecialchars($p['reg_id']),
-                htmlspecialchars($p['1_vardas'] ?? ''),
-                htmlspecialchars($p['1_pavarde'] ?? ''),
-                htmlspecialchars($p['1_klase'] ?? ''),
-                htmlspecialchars($p['var_mokykla'] ?? ''),
-                htmlspecialchars($p['1_mok'] ?? '-'),
-                htmlspecialchars($p['2_mok'] ?? '-'),
-                htmlspecialchars($balai),
-                htmlspecialchars($vieta)
-            ];
-            
-            if ($is_smsm) {
-                $kitas_etapas_tekstas = '—';
-                if (($p['kitas_etapas'] ?? 0) == 1) $kitas_etapas_tekstas = 'Siunčiamas';
-                elseif (($p['kitas_etapas'] ?? 0) == 2) $kitas_etapas_tekstas = 'Nesiunčiamas';
-                $row[] = htmlspecialchars($kitas_etapas_tekstas);
-            }
-            
-            $data[] = $row;
+        if ($is_smsm) {
+            $kitas_etapas_tekstas = '—';
+            if (($p['kitas_etapas'] ?? 0) == 1) $kitas_etapas_tekstas = 'Siunčiamas';
+            elseif (($p['kitas_etapas'] ?? 0) == 2) $kitas_etapas_tekstas = 'Nesiunčiamas';
+            $row[] = htmlspecialchars($kitas_etapas_tekstas);
         }
 
-        echo '<div class="olympiad-section" style="page-break-after: always;">';
-        
-        echo generate_printable_page($olympiad['konkurso_pav'] . ' - Rezultatai', '', $headers, $data, [
-            'include_back_button' => false,
-            'is_last_page' => ($page_num + 1 === $total_pages),
-            'page_num' => $page_num + 1,
-            'total_pages' => $total_pages
-        ], 'protocol');
-        
-        echo '</div>';
+        $data[] = $row;
     }
 
-    echo print_document_foot();
-
-    exit;
+    $pdf = report_pdf_create('protocol');
+    report_pdf_add_section($pdf, $olympiad['konkurso_pav'] . ' - Rezultatai', '', $headers, $data, 'protocol');
+    report_pdf_output($pdf, 'Rezultatai_' . $olympiad['konkurso_pav'] . '.pdf');
 }
 
 // Įtraukiame antraštę naršyklės vaizdui
