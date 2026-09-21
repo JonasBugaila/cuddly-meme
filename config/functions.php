@@ -418,6 +418,9 @@ function print_document_head($layout_key = 'protocol') {
     // gulsčias = 210 mm). Padėtis imama iš šablono - žr. get_print_layout().
     $orientation = (($layout['orientation'] ?? 'portrait') === 'landscape') ? 'landscape' : 'portrait';
     $page_h_mm = print_page_height_mm($layout);
+    // Turinio plotis (lapo plotis atėmus kairę ir dešinę paraštes)
+    $page_w_mm = ($orientation === 'landscape') ? 297 : 210;
+    $content_w_mm = $page_w_mm - (int)($layout['margin_l'] ?? 20) - (int)($layout['margin_r'] ?? 20);
 
     $html = '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';
 
@@ -428,7 +431,16 @@ function print_document_head($layout_key = 'protocol') {
 
         @media screen {
             .print-wrapper {
+                /* Nematomas ekrane, BET tikslių spausdinimo matmenų (plotis, aukštis,
+                   šriftas) - tam, kad puslapiavimo skriptas galėtų išmatuoti realų
+                   turinio aukštį prieš spausdinimą. */
                 position: absolute; left: -9999px; top: -9999px; visibility: hidden;
+                width: ' . $content_w_mm . 'mm;
+                height: calc(' . $page_h_mm . 'mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
+                overflow: hidden;
+                box-sizing: border-box;
+                font-family: "Times New Roman", Times, serif;
+                font-size: ' . (int)($layout['font_size'] ?? 12) . 'pt;
             }
         }
 
@@ -481,21 +493,173 @@ function print_document_head($layout_key = 'protocol') {
 
     $html .= '</head><body>';
 
+    // =====================================================================
+    // NAUJA: TIKSLUS PUSLAPIAVIMAS NARŠYKLĖJE (prieš atidarant spausdinimą)
+    //
+    // Serveris (PHP) eilučių skaičių puslapyje gali tik ĮVERTINTI - jis nežino,
+    // kiek realiai užims ilgas mokyklos ar olimpiados pavadinimas, laužomas per
+    // 2-3 eilutes (pvz. parašų lape). Kai įvertis per didelis, lentelė užlipdavo
+    // ant puslapio numerio, o netilpusios eilutės buvo paslepiamos (overflow).
+    //
+    // Šis skriptas po užkrovimo IŠMATUOJA kiekvieno puslapio tikrą turinio
+    // aukštį. Jei turinys netelpa (paliekant 12 mm juostą numeriui), paskutinės
+    // eilutės perkeliamos į naują puslapį (su ta pačia antrašte ir lentelės
+    // galva), poraštė (parašai) keliauja kartu į paskutinį puslapį. Galiausiai
+    // visi puslapiai pernumeruojami "1 iš N". Tik tada atidaromas spausdinimas.
+    // =====================================================================
     $html .= '<script>
-        document.addEventListener("DOMContentLoaded", function() {
-            setTimeout(function() {
-                window.print();
-            }, 400);
-            window.onafterprint = function() {
-                setTimeout(function() {
-                    if (window.history.length > 1) {
-                        window.history.back();
-                    } else {
-                        window.close();
+    (function () {
+        function mmToPx(mm) {
+            var d = document.createElement("div");
+            d.style.cssText = "position:absolute;visibility:hidden;height:" + mm + "mm;";
+            document.body.appendChild(d);
+            var h = d.getBoundingClientRect().height;
+            d.parentNode.removeChild(d);
+            return h;
+        }
+
+        function overflows(w, reserve) {
+            var r = w.getBoundingClientRect();
+            var max = r.top;
+            for (var i = 0; i < w.children.length; i++) {
+                var ch = w.children[i];
+                if (ch.classList.contains("page-number")) continue;
+                var b = ch.getBoundingClientRect().bottom;
+                if (b > max) max = b;
+            }
+            return max > r.top + w.clientHeight - reserve + 0.5;
+        }
+
+        function footerOf(w) {
+            var f = w.querySelector(".print-footer");
+            return (f && f.innerHTML.replace(/\s/g, "") !== "") ? f.innerHTML : "";
+        }
+
+        function headerOf(w) {
+            var h = w.querySelector(".print-header");
+            return h ? h.innerHTML : "";
+        }
+
+        // Sugrupuojame puslapius į skyrius: iš eilės einantys puslapiai su ta pačia
+        // antrašte priklauso tam pačiam skyriui; puslapis su porašte skyrių užbaigia.
+        function groups() {
+            var ws = document.querySelectorAll(".print-wrapper");
+            var out = [], cur = [];
+            for (var i = 0; i < ws.length; i++) {
+                if (cur.length && headerOf(cur[0]) !== headerOf(ws[i])) { out.push(cur); cur = []; }
+                cur.push(ws[i]);
+                if (footerOf(ws[i]) !== "") { out.push(cur); cur = []; }
+            }
+            if (cur.length) out.push(cur);
+            return out;
+        }
+
+        // Iš naujo paskirsto VISAS skyriaus eilutes: pilama iš eilės, kol lapas
+        // prisipildo (pagal TIKRĄ išmatuotą aukštį), tada pradedamas naujas lapas.
+        function reflow(ws, reserve) {
+            var first = ws[0];
+            var firstSection = first.parentNode;
+            var footerHtml = "";
+            var rows = [];
+
+            for (var i = 0; i < ws.length; i++) {
+                var fh = footerOf(ws[i]);
+                if (fh !== "") footerHtml = fh;
+                var tb = ws[i].querySelector("table tbody");
+                if (tb) { while (tb.rows.length) rows.push(tb.removeChild(tb.rows[0])); }
+            }
+            if (!first.querySelector("table tbody")) return;
+
+            for (var j = 1; j < ws.length; j++) {
+                var s = ws[j].parentNode;
+                s.parentNode.removeChild(s);
+            }
+            var ff = first.querySelector(".print-footer");
+            if (ff) ff.innerHTML = "";
+
+            var proto = first.cloneNode(true);
+            var cur = first, curSection = firstSection;
+
+            function newPage() {
+                var ns = firstSection.cloneNode(false);
+                var nw = proto.cloneNode(true);
+                ns.appendChild(nw);
+                curSection.parentNode.insertBefore(ns, curSection.nextSibling);
+                curSection = ns;
+                cur = nw;
+            }
+
+            for (var k = 0; k < rows.length; k++) {
+                var tbody = cur.querySelector("table tbody");
+                tbody.appendChild(rows[k]);
+                if (tbody.rows.length > 1 && overflows(cur, reserve)) {
+                    tbody.removeChild(rows[k]);
+                    newPage();
+                    cur.querySelector("table tbody").appendChild(rows[k]);
+                }
+            }
+
+            // Poraštė (parašai) - po PASKUTINE duomenų eilute
+            if (footerHtml !== "") {
+                var f = cur.querySelector(".print-footer");
+                f.innerHTML = footerHtml;
+                if (overflows(cur, reserve)) {
+                    f.innerHTML = "";
+                    var prevBody = cur.querySelector("table tbody");
+                    newPage();
+                    var nb = cur.querySelector("table tbody");
+                    cur.querySelector(".print-footer").innerHTML = footerHtml;
+                    // Kartu su porašte perkeliame 1-2 paskutines eilutes, kad
+                    // parašai nebūtų vieni tuščiame lape (jei tik jos telpa).
+                    for (var m = 0; m < 2 && prevBody.rows.length > 1; m++) {
+                        var last = prevBody.rows[prevBody.rows.length - 1];
+                        nb.insertBefore(last, nb.firstChild);
+                        if (overflows(cur, reserve)) {
+                            prevBody.appendChild(last);
+                            break;
+                        }
                     }
-                }, 100);
-            };
+                    if (nb.rows.length === 0) {
+                        var t = cur.querySelector("table");
+                        if (t) t.parentNode.removeChild(t);
+                    }
+                }
+            }
+        }
+
+        function paginate() {
+            var reserve = mmToPx(12);
+            var gs = groups();
+            for (var g = 0; g < gs.length; g++) reflow(gs[g], reserve);
+            var nums = document.querySelectorAll(".print-wrapper .page-number");
+            for (var n = 0; n < nums.length; n++) {
+                nums[n].textContent = (n + 1) + " iš " + nums.length;
+            }
+        }
+
+        function run() {
+            try { paginate(); } catch (e) { if (window.console) console.error(e); }
+            setTimeout(function () { window.print(); }, 200);
+        }
+
+        window.addEventListener("load", function () {
+            if (document.fonts && document.fonts.ready) {
+                document.fonts.ready.then(run);
+            } else {
+                run();
+            }
         });
+
+        window.onafterprint = function () {
+            setTimeout(function () {
+                if (window.history.length > 1) {
+                    window.history.back();
+                } else {
+                    window.close();
+                }
+            }, 100);
+        };
+    })();
     </script>';
 
     $html .= '<div class="screen-loader" style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: #f8f9fc; position: fixed; top: 0; left: 0; width: 100%; z-index: 9999; font-family: sans-serif;">';

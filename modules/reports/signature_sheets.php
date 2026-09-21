@@ -56,25 +56,37 @@ foreach ($winners as $winner) {
 if ($print_mode) {
     header('Content-Type: text/html; charset=UTF-8');
     // Paruošiame duomenis spausdinimui
-    $headers = ['Olimpiada', 'Vardas', 'Pavardė', 'Klasė', 'Mokykla', 'Mokytojas'];
+    // PATAISYTA: kai pasirinkta konkreti olimpiada, stulpelis "Olimpiada" nerodomas -
+    // tas pats pavadinimas jau yra lapo antraštėje, o kartojamas KIEKVIENOJE eilutėje
+    // jis laužydavosi per 3 eilutes ir be reikalo išpūsdavo lentelę (dėl to į lapą
+    // tilpdavo gerokai mažiau dalyvių). Stulpelis paliekamas tik spausdinant visas
+    // olimpiadas kartu, kai jis iš tiesų reikalingas.
+    $show_olympiad_col = empty($olympiad);
+
+    $headers = [];
+    if ($show_olympiad_col) {
+        $headers[] = 'Olimpiada';
+    }
+    $headers = array_merge($headers, ['Vardas', 'Pavardė', 'Klasė', 'Mokykla', 'Mokytojas']);
     if ($has_second_teacher) {
         $headers[] = 'Antras mokytojas';
     }
     $headers[] = 'Parašas';
-    
+
     $data = [];
-    
+
     foreach ($winners as $winner) {
-        $row = [
-            $winner['konkurso_pav'],
-            $winner['1_vardas'],
-            $winner['1_pavarde'],
-            $winner['1_klase'],
-            $winner['var_mokykla'],
-            $winner['1_mok'],
-        ];
+        $row = [];
+        if ($show_olympiad_col) {
+            $row[] = htmlspecialchars($winner['konkurso_pav'] ?? '');
+        }
+        $row[] = htmlspecialchars($winner['1_vardas'] ?? '');
+        $row[] = htmlspecialchars($winner['1_pavarde'] ?? '');
+        $row[] = htmlspecialchars($winner['1_klase'] ?? '');
+        $row[] = htmlspecialchars($winner['var_mokykla'] ?? '');
+        $row[] = htmlspecialchars($winner['1_mok'] ?? '');
         if ($has_second_teacher) {
-            $row[] = $winner['2_mok'];
+            $row[] = htmlspecialchars($winner['2_mok'] ?? '');
         }
         $row[] = '___________________';
         $data[] = $row;
