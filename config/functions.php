@@ -164,11 +164,35 @@ function get_print_layout($layout_key = 'protocol') {
         $all_layouts = ['protocol' => $old_layout, 'evaluation' => $old_layout, 'codes' => $old_layout, 'signature' => $old_layout];
     }
 
-    return $all_layouts[$layout_key] ?? ($all_layouts['protocol'] ?? [
+    $layout = $all_layouts[$layout_key] ?? ($all_layouts['protocol'] ?? [
         'header_html' => '<div style="text-align: center; margin-bottom: 20px;"><h3>{{INSTITUTION}}</h3><h4 style="color: #444;">{{TITLE}}</h4></div>',
         'footer_html' => '',
         'margin_t' => 20, 'margin_b' => 20, 'margin_l' => 20, 'margin_r' => 20, 'font_size' => 12
     ]);
+
+    // NAUJA: puslapio padėtis. Jei administratorius jos dar nepasirinko šablone,
+    // naudojama protinga numatytoji reikšmė pagal ataskaitos tipą:
+    // protokolai, vertinimo ir parašų lapai turi daug stulpelių, todėl jiems
+    // GULSČIA (landscape) padėtis; kodų lapas siauras - jam STAČIA (portrait).
+    if (empty($layout['orientation'])) {
+        $defaults = [
+            'protocol'   => 'landscape',
+            'evaluation' => 'landscape',
+            'signature'  => 'landscape',
+            'codes'      => 'portrait',
+        ];
+        $layout['orientation'] = $defaults[$layout_key] ?? 'landscape';
+    }
+
+    return $layout;
+}
+
+/**
+ * NAUJA: lapo aukštis milimetrais pagal pasirinktą padėtį.
+ * A4 stačias = 297 mm, A4 gulsčias = 210 mm.
+ */
+function print_page_height_mm($layout) {
+    return (($layout['orientation'] ?? 'portrait') === 'landscape') ? 210 : 297;
 }
 
 /**
@@ -226,11 +250,15 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
     // jam REIKIA realios vietos sraute (skirtingai nuo position:fixed varianto, kuris
     // nereikalaudavo jokios papildomos vietos, bet rodydavo neteisingą tekstą). Kad
     // saugiai tilptų numerio tekstas + linija virš jo + tarpai, rezervas padidintas.
-    $page_number_reserve_mm = 25;
+    // Vietos rezervas puslapio numeriui. Numeris pozicionuojamas absoliučiai
+    // (vietos sraute neužima), todėl rezervas reikalingas tik tam, kad paskutinė
+    // eilutė su juo nepersidengtų - 15 mm su kaupu pakanka.
+    $page_number_reserve_mm = 15;
 
     // Turimas turinio aukštis (A4 = 297mm) atėmus paraštes IR fiksuotą puslapio
     // numerio juostą (žr. aukščiau - visada rezervuojama, net jei numeracija išjungta)
-    $available_mm = 297 - $margin_t - $margin_b - $page_number_reserve_mm;
+    // PATAISYTA: lapo aukštis priklauso nuo padėties (gulsčias A4 = 210 mm)
+    $available_mm = print_page_height_mm($layout) - $margin_t - $margin_b - $page_number_reserve_mm;
 
     // Rezervas antraštei (header_html, rodoma kiekviename puslapyje) - šis turinys
     // kintamas (administratorius jį laisvai redaguoja per HugeRTE), todėl tikslus
@@ -256,7 +284,12 @@ function calculate_rows_per_page($layout, $reserve_footer = false) {
     // įvertis. Tiksliam rezultatui naudokite rankinį "rows_per_page" nustatymą
     // (žr. modules/admin/print_template.php) - jis visada turi pirmenybę.
     $pt_to_mm = 0.3528;
-    $line_height_factor = 2.2;
+    // PATAISYTA: koeficientas priklauso nuo puslapio padėties. Stačiame (portrait)
+    // lape stulpeliai siauri, todėl ilgi mokyklų/mokytojų pavadinimai dažnai
+    // laužomi per 2-3 eilutes - reikia didesnio koeficiento. Gulsčiame (landscape)
+    // lape stulpeliai gerokai platesni, tekstas laužomas daug rečiau, todėl
+    // eilutės realiai žemesnės ir jų telpa daugiau.
+    $line_height_factor = (($layout['orientation'] ?? 'portrait') === 'landscape') ? 1.5 : 2.2;
     $cell_padding_mm = 12 * 0.2646; // 6px + 6px, 1px ≈ 0.2646mm (96dpi)
     $row_height_mm = ($font_size * $pt_to_mm * $line_height_factor) + $cell_padding_mm + 0.6;
 
@@ -381,6 +414,11 @@ function print_document_head($layout_key = 'protocol') {
     // (žr. $page_number_reserve_mm ten) - t.y. eilučių tiesiog skaičiuojama mažiau.
     $effective_margin_b = (int)($layout['margin_b'] ?? 20);
 
+    // NAUJA: puslapio padėtis ir atitinkamas lapo aukštis (A4 stačias = 297 mm,
+    // gulsčias = 210 mm). Padėtis imama iš šablono - žr. get_print_layout().
+    $orientation = (($layout['orientation'] ?? 'portrait') === 'landscape') ? 'landscape' : 'portrait';
+    $page_h_mm = print_page_height_mm($layout);
+
     $html = '<!DOCTYPE html><html lang="lt"><head><meta charset="UTF-8"><title>Spausdinimas</title>';
 
     $html .= '<style>
@@ -406,7 +444,7 @@ function print_document_head($layout_key = 'protocol') {
                    lygiai vieno puslapio aukščio, todėl absoliučiai pozicionuotas
                    numeris visada lieka to paties lapo apačioje.
                    overflow:hidden - apsauga, kad persipildęs turinys neišstumtų maketo. */
-                height: calc(297mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
+                height: calc(' . $page_h_mm . 'mm - ' . (int)($layout['margin_t'] ?? 20) . 'mm - ' . $effective_margin_b . 'mm);
                 overflow: hidden;
                 box-sizing: border-box;
             }
@@ -432,6 +470,10 @@ function print_document_head($layout_key = 'protocol') {
                 font-size: ' . (int)($layout['font_size'] ?? 12) . 'pt !important;
             }
             @page {
+                /* NAUJA: puslapio padėtis pagal šablono nustatymą. Protokolams,
+                   vertinimo ir parašų lapams numatytoji - GULSČIA (landscape),
+                   nes portreto režimu netelpa visi stulpeliai. */
+                size: A4 ' . $orientation . ';
                 margin: ' . (int)($layout['margin_t'] ?? 20) . 'mm ' . (int)($layout['margin_r'] ?? 20) . 'mm ' . $effective_margin_b . 'mm ' . (int)($layout['margin_l'] ?? 20) . 'mm;
             }
         }

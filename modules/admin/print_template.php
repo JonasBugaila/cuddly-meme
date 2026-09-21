@@ -35,7 +35,8 @@ $default_data = [
     'margin_l' => 20,
     'margin_r' => 20,
     'font_size' => 12,
-    'rows_per_page' => 0
+    'rows_per_page' => 0,
+    'orientation' => 'landscape'
 ];
 
 // Saugus failo nuskaitymas ir struktūros atnaujinimas
@@ -72,7 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_layout'])) {
                 // NAUJA: neprivalomas rankinis eilučių-per-puslapį nustatymas.
                 // 0 arba tuščia reikšmė = automatinis apskaičiavimas pagal paraštes/šriftą
                 // (žr. config/functions.php calculate_rows_per_page()).
-                'rows_per_page' => (int)($_POST['rows_per_page'] ?? 0)
+                'rows_per_page' => (int)($_POST['rows_per_page'] ?? 0),
+                // NAUJA: puslapio padėtis (gulsčias / stačias)
+                'orientation' => (($_POST['orientation'] ?? 'landscape') === 'portrait') ? 'portrait' : 'landscape'
             ];
             
             file_put_contents($config_file, json_encode($all_layouts, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
@@ -210,6 +213,13 @@ document.addEventListener("DOMContentLoaded", function() {
                                     </div>
 
                                     <hr>
+                                    <label class="form-label fw-bold mb-1" for="orientation">Puslapio padėtis</label>
+                                    <select class="form-select form-select-sm mb-1" id="orientation" name="orientation">
+                                        <option value="landscape" <?php echo (($current_layout['orientation'] ?? 'landscape') !== 'portrait') ? 'selected' : ''; ?>>Gulsčia (landscape)</option>
+                                        <option value="portrait" <?php echo (($current_layout['orientation'] ?? 'landscape') === 'portrait') ? 'selected' : ''; ?>>Stačia (portrait)</option>
+                                    </select>
+                                    <small class="text-muted d-block mb-3">Protokolams, vertinimo ir parašų lapams rekomenduojama <strong>gulsčia</strong> - stačiame lape netelpa visi stulpeliai.</small>
+
                                     <label class="form-label fw-bold mb-1" for="rows_per_page">Eilučių skaičius viename puslapyje</label>
                                     <input type="number" min="0" class="form-control form-control-sm mb-1" id="rows_per_page" name="rows_per_page" value="<?php echo (int)($current_layout['rows_per_page'] ?? 0); ?>">
                                     <small class="text-muted d-block">
